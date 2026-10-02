@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "/zip-zap-notes/": "./src/"
+  }
+}

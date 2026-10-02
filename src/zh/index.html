@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Zip Zap Notes</title>
+    <meta name="description" content="基于浏览器的躲避游戏，只需加载音乐文件（MP3/WAV/OGG 等）即可自动生成关卡。左右移动躲开落下的方块，在 HP 耗尽前坚持到曲终。你还可以直接播放 MIDI 文件，并使用 SoundFont（SF2/SF3）更换音源。">
+    <meta property="og:title" content="Zip Zap Notes">
+    <meta property="og:description" content="基于浏览器的躲避游戏，只需加载音乐文件（MP3/WAV/OGG 等）即可自动生成关卡。左右移动躲开落下的方块，在 HP 耗尽前坚持到曲终。你还可以直接播放 MIDI 文件，并使用 SoundFont（SF2/SF3）更换音源。">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <script>
+      (function() {
+        const saved = localStorage.getItem("darkMode");
+        const prefersDark = globalThis.matchMedia("(prefers-color-scheme: dark)").matches;
+        const theme = saved || (prefersDark ? "dark" : "light");
+        document.documentElement.setAttribute("data-bs-theme", theme);
+      })();
+    </script>
+    <!-- Global site tag (gtag.js) - Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-F2179JXDYY"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-F2179JXDYY');
+    </script>
+    <link rel="icon" type="image/png" href="/flip-flap-notes/favicon/favicon.png">
+    <link rel="icon" type="image/svg+xml" href="/flip-flap-notes/favicon/favicon.svg">
+    <link rel="apple-touch-icon" sizes="180x180" href="/flip-flap-notes/favicon/apple-touch-icon.png">
+    <link rel="manifest" href="/flip-flap-notes/favicon/site.webmanifest">
+    <link rel="alternate" href="https://marmooo.github.io/flip-flap-notes/" hreflang="x-default">
+    <link rel="alternate" href="https://marmooo.github.io/flip-flap-notes/ja/" hreflang="ja">
+    <link rel="alternate" href="https://marmooo.github.io/flip-flap-notes/en/" hreflang="en">
+    <link class="drop-inline-css" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+    <link class="drop-inline-css" id="iosTouchGuardsStyle" rel="stylesheet" href="/flip-flap-notes/ios-touch-guards.css">
+    <style>
+      body { min-height: 100dvh; overflow: hidden; }
+
+      #libraryColumns {
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      .table-columns {
+        position: relative;
+      }
+      .table-columns summary {
+        cursor: pointer;
+        user-select: none;
+        list-style: none;
+        padding: 0.375rem 0.75rem;
+        border: 1px solid var(--bs-border-color);
+        border-radius: var(--bs-border-radius);
+        background: var(--bs-body-bg);
+      }
+      .table-columns summary::-webkit-details-marker {
+        display: none;
+      }
+      .table-columns summary::after {
+        content: " ▼";
+        font-size: 0.75em;
+      }
+      .table-columns[open]
+        summary::after {
+        content: " ▲";
+      }
+      .table-columns ul {
+        position: absolute;
+        top: calc(100% + 4px);
+        right: 0;
+        min-width: 180px;
+        margin: 0;
+        padding: 8px;
+        list-style: none;
+        border: 1px solid var(--bs-border-color);
+        border-radius: var(--bs-border-radius);
+        background: var(--bs-body-bg);
+        box-shadow: 0 4px 12px rgb(0 0 0 / 0.1);
+        z-index: 1000;
+      }
+      .table-columns li + li {
+        margin-top: 6px;
+      }
+      .table-columns-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+      }
+
+      /* 导航栏 Logo：使用与下落音符相同的配色，色彩丰富。
+         添加描边以保证在任何背景下都清晰可读（与开始画面标题同样的思路）。 */
+      .brand-logo {
+        background: linear-gradient(90deg,
+          #f76707 0%, #f06595 30%, #9775fa 55%, #22b8cf 78%, #51cf66 100%);
+        -webkit-background-clip: text; background-clip: text; color: transparent;
+        -webkit-text-stroke: 0.4px rgba(0, 0, 0, 0.15);
+      }
+      html[data-bs-theme="dark"] .brand-logo {
+        -webkit-text-stroke: 0.4px rgba(0, 0, 0, 0.35);
+        filter: drop-shadow(0 0 10px rgba(151, 117, 250, 0.2));
+      }
+      @supports not ((background-clip: text) or (-webkit-background-clip: text)) {
+        .brand-logo { color: var(--bs-warning); background: none; }
+      }
+
+      .gameLayer {
+        position: absolute; width: 100%; height: 100%;
+        pointer-events: none; touch-action: none;
+      }
+      #uiCanvas { pointer-events: auto; outline: none; }
+
+      /* ===== HUD 布局：暂停按钮 / 曲目信息 / 分数 =====
+         使用一个 CSS Grid 替代之前的 absolute-position + JS 高度同步（--attr-h）方案。
+         Grid 的 "auto" 轨道会根据每个元素实际渲染出的宽度和高度自动调整，
+         因此即使字体度量存在差异，暂停按钮和分数也不会与曲目信息重叠。
+         同时也不需要 JS 测量元素尺寸来防止重叠。
+         宽屏：单行 [暂停 | 曲目信息（可变宽度） | 分数]
+         窄屏 / 短屏：曲目信息单独占一整行，
+         暂停按钮和分数在下面一行左右排列。
+         仅通过媒体查询切换 Grid 模板，无需 JS。 */
+      #hudStack {
+        position: absolute;
+        top: var(--topbar-h, 48px);
+        left: 0.625rem;
+        right: 0.625rem;
+        z-index: 6;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        grid-template-areas: "pause attr score";
+        align-items: start;
+        column-gap: 0.5rem;
+        pointer-events: none;
+      }
+      #hudStack > * { pointer-events: none; }
+      #btnPause { grid-area: pause; pointer-events: auto; }
+      #trackAttribution { grid-area: attr; }
+      #scoreDisplay { grid-area: score; }
+
+      #trackAttribution {
+        margin-top: 0.2rem;
+        padding: 0.2rem 0.45rem;
+        border-radius: 0.4rem;
+        text-align: center;
+        min-width: 0; /* allow the grid item to shrink below content width for ellipsis */
+        background: color-mix(in srgb, var(--bs-body-bg) 38%, transparent);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        box-shadow: none;
+        line-height: 1.2;
+      }
+      #trackAttribution.hidden { display: none !important; }
+      #trackAttribution a {
+        pointer-events: auto;
+        color: inherit;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      #trackAttrTitle {
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #trackAttrMeta {
+        color: var(--bs-secondary-color);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #trackAttrMeta .sep::before {
+        content: " · ";
+        opacity: 0.7;
+      }
+
+      /* 分数 HUD。之前使用 Canvas（ctx.fillText）绘制，
+         现在改为 DOM 元素，让浏览器负责实际布局，
+         从而不再需要自行估算像素宽度。
+         外观与之前相同：
+         使用粗体等宽字体，
+         颜色通过 --score-color 指定。
+         --score-color 由 JS 设置为与 rhythm-game.js 中的
+         accentColor||uiColor 相同的颜色。
+         不添加发光效果。
+         Canvas 版本的分数本身也没有发光效果，只有连击会发光。 */
+      #scoreDisplay {
+        margin-top: 0.2rem;
+        padding-right: 0.2rem;
+        font: bold 1.15rem/1.2 monospace;
+        color: var(--score-color, currentColor);
+        text-align: right;
+        white-space: nowrap;
+      }
+      #scoreDisplay.hidden { display: none !important; }
+
+      /* Narrow / short: attribution full-width on its own row; pause/score below it */
+      @media (max-width: 576px), (max-height: 420px) {
+        #hudStack {
+          grid-template-columns: auto 1fr;
+          grid-template-rows: auto auto;
+          grid-template-areas:
+            "attr  attr"
+            "pause score";
+          row-gap: 0.3rem;
+        }
+        #trackAttribution {
+          padding: 0.15rem 0.4rem;
+          background: color-mix(in srgb, var(--bs-body-bg) 32%, transparent);
+        }
+      }
+
+      #canvasWrap {
+        position: relative; overflow: hidden;
+        background-color: var(--bs-body-bg);
+        /* 始终占满整个视口宽度：抵消父级 .container-fluid.px-2 的左右内边距
+           （0.5rem）。高度固定为整个屏幕（见 setWrapHeight()）。
+           #topnav 使用 position:fixed，只悬浮在画布上方；它不再
+           占用布局高度，因此 canvasWrap 不需要为它预留空间
+           （从而在 iPhone SE 横屏等矮屏设备上获得更多游玩区域）。 */
+        margin-left: -0.5rem;
+        margin-right: -0.5rem;
+        width: calc(100% + 1rem);
+      }
+
+      /* ===== 顶部栏：悬浮在画布上方的透明导航栏 =====
+         position:fixed 使其脱离文档流，从而让 canvasWrap 保持全屏。
+         背景为 bg-transparent（HTML class）；这里只处理
+         position/z-index 以及点击穿透（空白处的点击会传递到画布，
+         Logo 与按钮本身仍可正常点击）。 */
+      #topnav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+      }
+      .backgroundLayer {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        object-fit: cover; object-position: center; pointer-events: none;
+      }
+
+      .overlay {
+        position: absolute; inset: 0;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        /* 高透明度且整屏均匀，即使加载了背景图片/视频，
+           文字也能保持清晰可读（不采用仅中心区域渐隐的方式）。 */
+        background-color: rgba(var(--bs-body-bg-rgb), 0.8);
+        z-index: 10;
+      }
+      .overlay.hidden { display: none; }
+
+      /* ===== 开始画面（首屏）的视觉效果 =====
+         在首屏背景中预览真实的游戏画面（4 条轨道、透视效果、音符从上方落下），
+         让玩家在阅读说明之前就能直观感受到游戏内容。
+         浅色模式：清晰的高对比度基础样式（模糊光晕几乎不可见）。
+         深色模式（data-bs-theme="dark"）：在此基础上叠加发光效果。 */
+      #screenStart { position: relative; isolation: isolate; }
+
+      /* Flip Flap Notes 的 Logo 标题（h1）。使用与导航栏 .brand-logo
+         相同的配色，并放大用于首屏展示。 */
+      .hero-logo {
+        margin: 0;
+        font-size: clamp(2rem, 7vw + 1rem, 4rem);
+        font-weight: 800; letter-spacing: -0.02em; line-height: 1.1;
+      }
+      @supports (background-clip: text) or (-webkit-background-clip: text) {
+        .hero-logo {
+          background: linear-gradient(90deg,
+            #f76707 0%, #f06595 30%, #9775fa 55%, #22b8cf 78%, #51cf66 100%);
+          -webkit-background-clip: text; background-clip: text; color: transparent;
+          -webkit-text-stroke: 0.6px rgba(0, 0, 0, 0.18);
+          filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+        }
+      }
+      @supports not ((background-clip: text) or (-webkit-background-clip: text)) {
+        .hero-logo { color: var(--bs-warning); }
+      }
+
+      @supports (background-clip: text) or (-webkit-background-clip: text) {
+        #screenStart .hero-title {
+          background: linear-gradient(120deg, #e8590c 0%, #f76707 45%, #d9480f 100%);
+          -webkit-background-clip: text; background-clip: text; color: transparent;
+          /* 细描边 + 短硬阴影，确保在任何背景图片/视频上轮廓都清晰可见。 */
+          -webkit-text-stroke: 0.6px rgba(0, 0, 0, 0.18);
+          filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+        }
+      }
+
+      #startFeatureBadges .feature-chip {
+        display: inline-flex; align-items: center; gap: .4em;
+        padding: .4em .9em; border-radius: 999px;
+        font-size: .8rem; font-weight: 600;
+        color: var(--bs-body-color);
+        background: color-mix(in srgb, currentColor 5%, transparent);
+        border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      }
+
+      #selectPanel {
+        position: relative;
+        background: color-mix(in srgb, var(--bs-body-bg) 92%, transparent);
+        border: 1px solid color-mix(in srgb, var(--bs-warning) 45%, transparent) !important;
+        border-radius: 1rem !important;
+        box-shadow: 0 12px 30px -14px rgba(0, 0, 0, 0.25);
+        transition: border-color 120ms ease, background-color 120ms ease,
+                    box-shadow 120ms ease;
+      }
+      #selectPanel.drag-active {
+        border-color: var(--bs-warning) !important;
+        background: color-mix(in srgb, var(--bs-warning) 8%, var(--bs-body-bg));
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--bs-warning) 18%, transparent);
+      }
+      #selectPanel.drag-active::after {
+        content: "拖放到此处";
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: inherit;
+        background: color-mix(in srgb, var(--bs-body-bg) 75%, transparent);
+        color: var(--bs-warning-text-emphasis);
+        font-weight: 600;
+        pointer-events: none;
+      }
+      /* Primary CTA on start screen: Random MIDI */
+      #btnRandomMidiStart {
+        background: linear-gradient(135deg, #f76707, #d9480f);
+        border: none; color: #fff;
+        box-shadow: 0 4px 14px -4px rgba(120, 53, 15, 0.55);
+        font-weight: 700;
+        padding: 0.55rem 1.35rem;
+      }
+      #btnRandomMidiStart:hover, #btnRandomMidiStart:focus {
+        background: linear-gradient(135deg, #fd7e14, #d9480f);
+        color: #fff;
+      }
+      #btnRandomMidiStart:disabled {
+        opacity: 0.75;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        #btnRandomMidiStart { animation: heroPulse 2.6s ease-in-out infinite; }
+      }
+      @keyframes heroPulse {
+        0%, 100% { box-shadow: 0 4px 14px -4px rgba(120, 53, 15, 0.55); }
+        50%      { box-shadow: 0 6px 20px 0px rgba(120, 53, 15, 0.7); }
+      }
+
+      /* ---- 深色模式：添加发光 / 玻璃质感效果 ---- */
+      html[data-bs-theme="dark"] .hero-logo {
+        -webkit-text-stroke: 0.6px rgba(0, 0, 0, 0.35);
+        filter: drop-shadow(0 2px 18px rgba(151, 117, 250, 0.25));
+      }
+      html[data-bs-theme="dark"] #screenStart .hero-title {
+        background: linear-gradient(120deg, #ffe066 0%, #ffb703 45%, #fb8500 100%);
+        -webkit-background-clip: text; background-clip: text;
+        -webkit-text-stroke: 0.6px rgba(0, 0, 0, 0.35);
+        filter: drop-shadow(0 2px 16px rgba(251, 133, 0, 0.25));
+      }
+      html[data-bs-theme="dark"] #selectPanel {
+        background: color-mix(in srgb, var(--bs-body-bg) 55%, transparent);
+        backdrop-filter: blur(10px);
+        box-shadow: 0 12px 40px -16px rgba(0, 0, 0, 0.45),
+                    0 0 0 1px color-mix(in srgb, var(--bs-warning) 8%, transparent) inset;
+      }
+      html[data-bs-theme="dark"] #btnRandomMidiStart {
+        background: linear-gradient(135deg, #ffb703, #fb8500);
+        box-shadow: 0 4px 18px -4px rgba(251, 133, 0, 0.65);
+        animation-name: heroPulseDark;
+      }
+      html[data-bs-theme="dark"] #btnRandomMidiStart:hover,
+      html[data-bs-theme="dark"] #btnRandomMidiStart:focus {
+        background: linear-gradient(135deg, #ffc93c, #fb8500);
+        color: #fff;
+      }
+      @keyframes heroPulseDark {
+        0%, 100% { box-shadow: 0 4px 18px -4px rgba(251, 133, 0, 0.65); }
+        50%      { box-shadow: 0 6px 26px 2px rgba(251, 133, 0, 0.85); }
+      }
+
+      .lane-key-chip {
+        display: inline-block; width: 2.2em; height: 2.2em;
+        line-height: 2.2em; text-align: center; border-radius: 6px;
+        font-family: monospace; font-weight: bold; font-size: 1.05em;
+        border: 1px solid transparent;
+        margin: 2px;
+        /* --lane-color 由 JS（renderKeyHints）按每条轨道单独设置。
+           文字/背景颜色通过 color-mix 将 currentColor（自动适配浅/深色模式）
+           与轨道颜色混合，以保证两种主题下对比度都保持一致。 */
+        --lane-color: currentColor;
+        background: color-mix(in srgb, var(--lane-color) 20%, transparent);
+        border-color: var(--lane-color);
+        color: color-mix(in srgb, var(--lane-color) 65%, currentColor 35%);
+      }
+
+      .grade-badge { font-size: 3.5rem; font-weight: 900; line-height: 1; }
+      .grade-S { color: #ffe066; text-shadow: 0 0 20px #ffe066; }
+      .grade-A { color: #66ffcc; text-shadow: 0 0 20px #66ffcc; }
+      .grade-B { color: #66ccff; text-shadow: 0 0 20px #66ccff; }
+      .grade-C { color: #ff9966; text-shadow: 0 0 20px #ff9966; }
+      .grade-D { color: #ff6666; text-shadow: 0 0 20px #ff6666; }
+
+      /* Generic hide class (used for MIDI player / audio transport switching) */
+      .hidden { display: none !important; }
+
+      /* 音频模式提示（readyHintAudio）：switchMode() 会设置 html[data-mode]；
+         仅在音频模式下显示。 */
+      [data-hint-mode] { display: none; }
+      html[data-mode="audio"] [data-hint-mode="audio"] {
+        display: block;
+      }
+
+      .border-dashed { border-style: dashed !important; }
+
+      .lane-color-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+      .lane-color-grid label {
+        display: flex; flex-direction: column; align-items: center; gap: 2px; width: 40px;
+      }
+      .lane-color-grid input[type=color] {
+        width: 100%; height: 32px; padding: 2px; border-radius: 4px; cursor: pointer;
+      }
+
+      .lane-key-input { width: 2.4em; height: 2.4em; padding: 0; font-size: 1.1em; }
+
+      .lane-input-wrap {
+        display: flex; flex-direction: column; align-items: center; gap: 0.25rem;
+      }
+
+      #resultTable td { padding: 2px 14px; }
+      #resultTable .label { color: var(--bs-secondary-color); }
+
+      audio#player { width: 100%; height: 36px; }
+      #analyzingProgressWrap { width: 240px; }
+    </style>
+
+    <!-- 首屏“下落音符”效果的专属样式。
+         与真实游戏采用相同的透视：梯形越靠前越大。
+         颜色/透明度为浅色模式的基础值；深色模式（data-bs-theme="dark"）会叠加更强的发光效果。 -->
+    <style id="heroFallingNotesStyle">
+      .hero-bg {
+        position: absolute; inset: 0; z-index: -1;
+        overflow: hidden; pointer-events: none;
+        /* 避免屏幕中间出现明显的色带：不使用中心遮罩，整体保持均匀的低透明度。
+           仅在上下边缘做柔和渐隐。 */
+        -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 8%, black 92%, transparent 100%);
+        mask-image: linear-gradient(to bottom, transparent 0%, black 8%, black 92%, transparent 100%);
+      }
+      .hero-lanes {
+        position: absolute; left: 50%; bottom: -6%;
+        width: 100%; height: 150%;
+        transform: translateX(-50%) perspective(1800px) rotateX(50deg);
+        transform-origin: bottom center;
+        display: flex; gap: 3px;
+      }
+      .hero-lane {
+        flex: 1; position: relative;
+        border-left: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+      }
+      .hero-lane:last-child { border-right: 1px solid color-mix(in srgb, currentColor 10%, transparent); }
+
+      /* 音符主体：一个大小固定的矩形，以恒定速度从 top: -70% 移动到 112%
+         （与真实游戏相同：所有音符共享同一速度，不存在追越）。
+         远处变小、近处变大的效果完全来自父级 .hero-lanes 的
+         perspective(1800px) rotateX(50deg) 平面变换——而非逐个音符的缩放或 clip-path。
+         perspective 最初为 500px，这会使消失点落在屏幕顶部以下很多，
+         导致无论 top 延伸多远，音符看起来都不会从最顶端出现。
+         将其加大到 1800px 后，消失点被推到屏幕顶部之外，
+         于是可以用 top: -70% 表示“从顶部边缘附近出现”
+         （为了在消失点上移后恢复梯形收窄效果，rotateX 也从 42° 加强到 50°；
+         同时 perspective 从 1400px 调整到 1800px，为高屏幕留出余量，
+         确保消失点始终位于屏幕之外）。
+         --note-h（点击音符长度的细微变化）与 --note-color 在 HTML 中按每个音符单独设置；
+         CSS 只是读取这些值。我们不会按轨道改变梯形角度
+         （对于背景效果而言没有必要）。 */
+      .hero-note {
+        position: absolute; top: -70%;
+        left: var(--note-l, 17%); right: var(--note-r, 17%);
+        height: var(--note-h, 11px);
+        border-radius: 1px;
+        background: color-mix(in srgb, var(--note-color, #f76707) 28%, transparent);
+      }
+      .hero-judgeline {
+        position: absolute; left: 6%; right: 6%; bottom: 21%; height: 2px;
+        background: linear-gradient(90deg, transparent, color-mix(in srgb, #f76707 35%, transparent) 50%, transparent);
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .hero-note {
+          animation-name: heroFall;
+          animation-duration: 10s; /* shared by all notes = constant speed (slow fall) */
+          animation-timing-function: linear;
+          animation-iteration-count: infinite;
+        }
+      }
+      @keyframes heroFall {
+        from { top: -70%; }
+        to   { top: 112%; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .hero-note { top: 45%; }
+      }
+
+      /* ---- 深色模式：轻微发光（始终位于文字之下，因此保持适度） ---- */
+      html[data-bs-theme="dark"] .hero-note {
+        background: color-mix(in srgb, var(--note-color, #fb8500) 25%, transparent);
+        box-shadow: 0 0 8px color-mix(in srgb, var(--note-color, #fb8500) 30%, transparent);
+      }
+      html[data-bs-theme="dark"] .hero-judgeline {
+        background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--bs-warning) 55%, transparent) 50%, transparent);
+      }
+    </style>
+    <script data-ad-client="ca-pub-6459713332128733" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+  </head>
+  <body>
+
+    <!-- 顶部栏 -->
+    <nav id="topnav" class="navbar navbar-expand bg-transparent">
+      <div class="container-fluid px-3 gap-2">
+        <a class="navbar-brand mb-0 fw-bold brand-logo" href="/flip-flap-notes/">
+          <img alt="" src="/flip-flap-notes/favicon/favicon.svg" width="32" height="32">
+          Zip Zap Notes
+        </a>
+        <div class="d-flex gap-1 ms-auto align-items-center">
+          <select title="语言" id="lang" class="form-select form-select-sm">
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+            <option value="zh" selected>中文</option>
+          </select>
+          <button title="设置" id="btnSettings"    class="fs-4 btn p-0">⚙</button>
+          <button title="切换深色模式" id="toggleDarkMode" class="fs-4 btn p-0">🌓</button>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container-fluid px-2">
+
+      <!-- 用于播放的原生 <audio> 元素。界面已隐藏，仅作为内部播放引擎使用
+           （操作方式为中央大按钮、左上角暂停按钮以及空格键）。 -->
+      <audio id="player" preload="auto" hidden></audio>
+
+      <!-- 游戏画布 -->
+      <div id="canvasWrap">
+        <img id="backgroundImage" class="backgroundLayer" hidden>
+        <video id="backgroundVideo" class="backgroundLayer" hidden loop muted autoplay playsinline></video>
+        <canvas id="noteCanvas"     class="gameLayer"></canvas>
+        <canvas id="particleCanvas" class="gameLayer"></canvas>
+        <canvas id="uiCanvas"       class="gameLayer"></canvas>
+
+        <!-- HUD 布局：暂停按钮、曲目信息、分数。
+             通过 #hudStack 的 CSS Grid（见上文）统一进行布局，
+             确保它们不会相互重叠。
+             窄屏和宽屏之间的布局切换完全通过 CSS 完成，
+             无需 JS 同步高度。 -->
+        <div id="hudStack">
+          <!-- 暂停按钮。MIDI 模式和音频模式都会通过此按钮调用 togglePause()。
+               MIDI 模式内部会使用 midy.pause()/resume()。
+               使用 SVG 替代 ⏸ / ▶ 表情符号，以避免不同字体或操作系统
+               导致图标溢出或被裁剪。
+               SVG 使用固定尺寸。
+               实际的图标切换由 game.js 通过 innerHTML 设置
+               ICON_PAUSE / ICON_PLAY 来完成。 -->
+          <button id="btnPause" type="button" title="Space to pause/resume"
+                  class="btn btn-sm btn-secondary rounded-circle hidden
+                         d-flex align-items-center justify-content-center"
+                  style="width:2.4rem; height:2.4rem; padding:0;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                 viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true">
+              <path d="M555-200v-560h175v560H555Zm-325 0v-560h175v560H230Z"></path>
+            </svg>
+          </button>
+
+          <!-- Track attribution for MIDI library works (title / composer / site / license) -->
+          <div id="trackAttribution" class="small hidden" aria-live="polite">
+            <div id="trackAttrTitle"></div>
+            <div id="trackAttrMeta"></div>
+          </div>
+
+          <!-- Score HUD. Formerly drawn on the Canvas top-right corner
+               (rhythm-game.js #drawHUD); moved to DOM so the grid can size around
+               its real rendered width instead of us hard-coding an inset. Text is
+               kept in sync with lastResult.score from game.js's rAF loop. -->
+          <div id="scoreDisplay" class="hidden" aria-hidden="true">0000000</div>
+        </div>
+
+        <!-- 暂停遮罩（仅在游玩中由 btnPause 切换显示/隐藏） -->
+        <div id="pauseOverlay" class="hidden"
+             style="position:absolute; inset:0; z-index:4; display:flex;
+                    align-items:center; justify-content:center;
+                    background:rgba(0,0,0,0.45); pointer-events:none;">
+          <div class="fs-2 fw-bold text-white">已暂停</div>
+        </div>
+
+        <!-- 开始画面（标题/说明始终固定，不随模式切换而改变） -->
+        <div id="screenStart" class="overlay pt-5">
+          <div class="hero-bg" aria-hidden="true">
+            <div class="hero-lanes">
+              <div class="hero-lane">
+                <span class="hero-note" style="--note-h:14px; --note-color:#f76707; animation-delay:-0.3s;"></span>
+                <span class="hero-note" style="--note-h:81px; --note-color:#22b8cf; --note-l:22%; --note-r:22%; animation-delay:-2.9s;"></span>
+                <span class="hero-note" style="--note-h:19px; --note-color:#f06595; animation-delay:-6.1s;"></span>
+              </div>
+              <div class="hero-lane">
+                <span class="hero-note" style="--note-h:12px; --note-color:#9775fa; animation-delay:-1.1s;"></span>
+                <span class="hero-note" style="--note-h:27px; --note-color:#f76707; animation-delay:-3.9s;"></span>
+                <span class="hero-note" style="--note-h:122px; --note-color:#51cf66; --note-l:24%; --note-r:24%; animation-delay:-7.3s;"></span>
+              </div>
+              <div class="hero-lane">
+                <span class="hero-note" style="--note-h:54px; --note-color:#f06595; animation-delay:-1.6s;"></span>
+                <span class="hero-note" style="--note-h:15px; --note-color:#22b8cf; animation-delay:-4.4s;"></span>
+                <span class="hero-note" style="--note-h:22px; --note-color:#f76707; animation-delay:-8.2s;"></span>
+              </div>
+              <div class="hero-lane">
+                <span class="hero-note" style="--note-h:18px; --note-color:#51cf66; animation-delay:-2.5s;"></span>
+                <span class="hero-note" style="--note-h:95px; --note-color:#9775fa; --note-l:20%; --note-r:20%; animation-delay:-5.6s;"></span>
+                <span class="hero-note" style="--note-h:12px; --note-color:#f76707; animation-delay:-9.4s;"></span>
+              </div>
+            </div>
+            <div class="hero-judgeline"></div>
+          </div>
+
+          <div class="hero text-center px-2">
+            <div class="d-none d-md-block">
+              <h1 class="hero-logo mb-2">Zip Zap Notes (β)</h1>
+              <h2 id="startTitleInitial" class="hero-title mb-3">🎵 支持多种音符类型的下落式音乐游戏</h2>
+            </div>
+            <div>
+              <p id="startHintInitial1" class="text-muted small mb-1">只需加载音频文件（MP3/WAV/OGG 等）即可开始游戏</p>
+              <p id="startHintInitial2" class="text-muted small">拖放文件到此处</p>
+            </div>
+            <div class="d-none d-md-block">
+              <div id="startFeatureBadges" class="d-flex flex-wrap gap-2 justify-content-center my-2">
+                <span class="feature-chip">🎯 任意歌曲，自动生成谱面</span>
+                <span class="feature-chip">🎹 支持 MIDI / SF2 / SF3</span>
+                <span class="feature-chip">💻 无需安装</span>
+              </div>
+            </div>
+                        <!-- Primary: random MIDI. Secondary: file / library. -->
+            <div id="selectPanel" class="card border-secondary-subtle border-dashed mt-3 mx-auto"
+                 style="max-width: 34rem;">
+              <div class="card-body py-3 px-3 d-flex flex-column gap-2 align-items-center">
+                <button id="btnRandomMidiStart" type="button"
+                        class="btn btn-primary rounded-pill">
+                  🎲 随机 MIDI
+                </button>
+                <p class="small text-muted mb-0 text-center">
+                  随机选择超过 1 分钟的曲目并立即开始
+                </p>
+                <div class="d-flex flex-wrap gap-2 align-items-center justify-content-center mt-1">
+                  <button id="selectFile" class="btn btn-outline-secondary rounded-pill btn-sm">选择文件</button>
+                  <input id="inputFile" type="file" accept=".mid,.midi,.sf2,.sf3,audio/*" hidden>
+                  <button id="openLibrary" class="btn btn-outline-info rounded-pill btn-sm"
+                          data-bs-toggle="modal" data-bs-target="#screenLibrary">🎼 MIDI 库</button>
+                  <button id="openSoundFontLibrary" class="btn btn-outline-success rounded-pill btn-sm"
+                          data-bs-toggle="modal" data-bs-target="#soundFontLibraryModal">🎺 SoundFont</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="keyHintStart" class="d-flex gap-1 mt-3 flex-wrap justify-content-center"></div>
+            <p class="small text-muted mt-2 mb-0 text-center">使用 ← / → 键，或点击屏幕左半边 / 右半边，每次移动一条轨道。躲开落下的方块！</p>
+          </div>
+
+          <footer class="pt-md-5 alert text-center">
+            <div class="pt-3">
+              <a class="px-1" href="/">首页</a>
+              <a class="px-1" href="/terms/">条款</a>
+              <a class="px-1" href="https://github.com/marmooo/flip-flap-notes">联系方式</a>
+            </div>
+            <div class="text-muted">&copy; <a href="https://github.com/marmooo">marmooo</a>
+            </div>
+          </footer>
+        </div>
+
+        <!-- 准备画面 -->
+        <div id="screenReady" class="overlay hidden">
+          <div id="playLengthToggle" class="btn-group mb-3" role="group" aria-label="播放长度">
+            <input type="radio" class="btn-check" name="playLength" id="playLengthShort"
+                   data-length="short" autocomplete="off" checked>
+            <label class="btn btn-outline-primary" for="playLengthShort">短版<br>（2:00）</label>
+
+            <input type="radio" class="btn-check" name="playLength" id="playLengthOriginal"
+                   data-length="original" autocomplete="off">
+            <label class="btn btn-outline-primary" for="playLengthOriginal">原版</label>
+          </div>
+          <button id="btnBigStart" type="button"
+                  class="btn btn-primary rounded-circle fw-bold d-flex flex-column
+                         align-items-center justify-content-center mb-3"
+                  style="width:8rem;height:8rem;font-size:1.1rem;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"
+                 viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true">
+              <path d="M320-203v-560l440 280-440 280Z"></path>
+            </svg>
+            开始
+          </button>
+          <p id="readyHintAudio" class="text-muted small mb-1" data-hint-mode="audio">开始游戏时将自动生成谱面</p>
+          <div class="d-flex gap-1 flex-wrap justify-content-center mb-1">
+            <span id="keyHintReady" class="d-inline-flex gap-1 flex-wrap justify-content-center"></span>
+          </div>
+          <p class="small text-muted mb-1">使用 ← / → 键，或点击屏幕左半边 / 右半边，每次移动一条轨道。躲开落下的方块！</p>
+          <p class="small text-muted mb-3">你也可以按空格键开始</p>
+          <p class="small text-muted mb-1">难度：<strong id="diffLabel" class="text-warning-emphasis">—</strong>
+            　音符数：<span id="noteCountLabel">—</span></p>
+          <button id="btnChangeFileReady" type="button"
+                  class="btn btn-sm btn-link text-muted mt-1">📂 返回开始画面</button>
+        </div>
+
+        <!-- 分析画面（仅音频模式） -->
+        <div id="screenAnalyzing" class="overlay hidden">
+          <h2 class="fw-bold mb-3 text-warning-emphasis">🔍 正在生成谱面…</h2>
+          <div id="analyzingProgressWrap" class="progress" style="height:8px;">
+            <div class="progress-bar bg-warning" id="analyzingProgressBar" style="width:0%"></div>
+          </div>
+          <p id="analyzingStage" class="small text-muted mt-2"></p>
+        </div>
+
+        <!-- 结算画面 -->
+        <div class="modal" id="screenResult" tabindex="-1" aria-labelledby="screenResultLabel" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-scrollable modal-dialog-centered">
+            <div class="modal-content text-center">
+              <div class="modal-header justify-content-center border-0 pb-0">
+                <div>
+                  <div id="resultGrade" class="grade-badge mb-1"></div>
+                  <h3 class="fw-bold mb-0 text-warning-emphasis" id="screenResultLabel">结果</h3>
+                </div>
+              </div>
+              <div class="modal-body pt-2">
+                <table id="resultTable" class="mx-auto mb-0 small">
+                  <tr><td class="label">得分</td><td id="rScore" class="text-end fw-bold"></td></tr>
+                  <tr><td class="label">躲避率</td><td id="rAccuracy" class="text-end"></td></tr>
+                  <tr><td class="label">最大连续躲避</td><td id="rCombo" class="text-end"></td></tr>
+                  <tr><td class="label">躲避</td><td id="rDodge" class="text-end text-success-emphasis"></td></tr>
+                  <tr><td class="label">被击中</td><td id="rHit" class="text-end text-danger-emphasis"></td></tr>
+                  <tr><td class="label">HP</td><td id="rHp" class="text-end"></td></tr>
+                  <tr><td class="label">进度</td><td id="rProgress" class="text-end"></td></tr>
+                  <tr><td class="label">难度</td>    <td id="rDifficulty" class="text-end"></td></tr>
+                  <tr><td class="label">轨道</td>    <td id="rLanes"     class="text-end"></td></tr>
+                  <tr><td class="label">下落速度</td><td id="rScrollSpeed" class="text-end"></td></tr>
+                </table>
+              </div>
+              <div class="modal-footer flex-column border-0 pt-0">
+                <div class="d-flex gap-1 justify-content-center">
+                  <div class="w-50">
+                    <button id="btnBigReplay" type="button"
+                                              class="btn btn-primary rounded-pill fw-bold w-100">
+                      ▶ 再玩一次
+                    </button>
+                    <p class="small text-muted mt-1 mb-0 d-none d-md-block">
+                    也可以按空格键重新开始
+                    </p>
+                  </div>
+                  <div class="w-50">
+                    <button id="btnRandomMidi" type="button"
+                                               class="btn btn-outline-info rounded-pill fw-bold w-100">
+                      🎲 随机 MIDI
+                    </button>
+                    <p class="small text-muted mt-1 mb-0 d-none d-md-block">
+                    从 MIDI 音乐库中随机选择一首超过 1 分钟的歌曲
+                    </p>
+                  </div>
+                </div>
+                <button id="btnChangeFileResult" type="button"
+                                                 class="btn btn-sm btn-link text-muted">📂 返回开始画面</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 设置 -->
+        <div class="modal" id="screenSettings" tabindex="-1"
+                                               aria-labelledby="screenSettingsLabel" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-scrollable">
+            <div class="modal-content" id="settingsPanel">
+
+              <div class="modal-header">
+                <h5 class="modal-title fw-bold text-warning-emphasis" id="screenSettingsLabel">⚙ 设置</h5>
+                <button type="button" class="btn-close" id="btnCloseSettings"
+                                                        data-bs-dismiss="modal" aria-label="关闭"></button>
+              </div>
+
+              <div class="modal-body" id="settingsBody">
+
+                <div class="mb-3">
+                  <label class="form-label">难度</label>
+                  <select class="form-select form-select-sm" id="difficulty">
+                    <option value="EASY">简单 — 约 1.2–2.0 nps，平均遮挡 20% 宽度，最多 35%（新手）</option>
+                    <option value="BASIC">初级 — 约 2.0–3.2 nps，平均 25%，最多 40%（入门）</option>
+                    <option value="NORMAL" selected>普通 — 约 3.2–4.8 nps，平均 25%，最多 45%（休闲）</option>
+                    <option value="HARD">困难 — 约 4.8–7.0 nps，平均 30%，最多 45%（熟练）</option>
+                    <option value="EXPERT">专家 — 约 7.0–10 nps，平均 30%，最多 50%（高级）</option>
+                  </select>
+                  <div class="small text-muted mt-1">
+                    ※ 方块的宽度随声音的强弱而变化（MIDI 中和弦会形成更宽的方块）。被遮挡的比例（按随时间累计的面积计算，长音符不会一直占满画面）由难度决定，增加轨道数不会变得更容易。<br>
+                    <span id="audioDiffNote" class="hidden">※ 在音频模式下，更改难度后将在下次游玩时重新生成谱面。</span>
+                  </div>
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label d-flex justify-content-between">
+                    轨道数 <span id="laneCountVal">6</span>
+                  </label>
+                  <input type="range" class="form-range" id="laneCount" min="4" max="12" step="1" value="6">
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label d-flex justify-content-between">
+                    卷动速度 <span id="scrollSpeedVal">700</span>
+                  </label>
+                  <input type="range" class="form-range" id="scrollSpeed" min="150" max="1200" step="50" value="700">
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label d-flex justify-content-between">
+                    画布分辨率（最大 DPR）<span id="maxPixelRatioVal">2</span>
+                  </label>
+                  <input type="range" class="form-range" id="maxPixelRatio" min="1" max="3" step="0.5" value="2">
+                  <div class="small text-muted mt-1">
+                    根据设备像素比限制画布分辨率上限。
+                    数值越低越省内存，在移动设备上更稳定；
+                    数值越高在高分辨率屏幕上显示越清晰。默认值为 1。
+                  </div>
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label d-flex justify-content-between">
+                    MIDI 缓存级别 <span id="cacheModeVal">5（分块）</span>
+                  </label>
+                  <input type="range" class="form-range" id="cacheMode" min="0" max="5" step="1" value="5">
+                  <div class="small text-muted mt-1">
+                    级别越高，对复杂 MIDI 的缓存越积极（可能会占用更多内存）。
+                    如果在 iOS 上播放 MIDI 时游戏崩溃，请将优化级别设置为 0。
+                  </div>
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label">轨道颜色</label>
+                  <div id="laneColorPickers" class="lane-color-grid">
+                    <label class="lane-input-wrap">
+                      <span class="small text-muted">1</span>
+                      <input type="color" class="form-control form-control-color">
+                    </label>
+                    <label class="lane-input-wrap">
+                      <span class="small text-muted">2</span>
+                      <input type="color" class="form-control form-control-color">
+                    </label>
+                    <label class="lane-input-wrap">
+                      <span class="small text-muted">3</span>
+                      <input type="color" class="form-control form-control-color">
+                    </label>
+                    <label class="lane-input-wrap">
+                      <span class="small text-muted">4</span>
+                      <input type="color" class="form-control form-control-color">
+                    </label>
+                    <label class="lane-input-wrap">
+                      <span class="small text-muted">5</span>
+                      <input type="color" class="form-control form-control-color">
+                    </label>
+                    <label class="lane-input-wrap">
+                      <span class="small text-muted">6</span>
+                      <input type="color" class="form-control form-control-color">
+                    </label>
+                    <label class="lane-input-wrap">
+                      <span class="small text-muted">7</span>
+                      <input type="color" class="form-control form-control-color">
+                    </label>
+                    <label class="lane-input-wrap">
+                      <span class="small text-muted">8</span>
+                      <input type="color" class="form-control form-control-color">
+                    </label>
+                    <label class="lane-input-wrap">
+                      <span class="small text-muted">9</span>
+                      <input type="color" class="form-control form-control-color">
+                    </label>
+                    <label class="lane-input-wrap">
+                      <span class="small text-muted">10</span>
+                      <input type="color" class="form-control form-control-color">
+                    </label>
+                    <label class="lane-input-wrap">
+                      <span class="small text-muted">11</span>
+                      <input type="color" class="form-control form-control-color">
+                    </label>
+                    <label class="lane-input-wrap">
+                      <span class="small text-muted">12</span>
+                      <input type="color" class="form-control form-control-color">
+                    </label>
+                  </div>
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label d-flex justify-content-between">
+                    轨道透明度 <span id="laneOpacityVal">0.35</span>
+                  </label>
+                  <input type="range" class="form-range" id="laneOpacity" min="0" max="1" step="0.05" value="0.35">
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label d-flex justify-content-between align-items-center mb-0">
+                    按钮文字颜色（强调色）
+                    <span class="d-flex align-items-center gap-1">
+                      <input type="color" id="accentColor" class="form-control form-control-color"
+                                                           style="width:2.5em;height:1.8em;padding:2px;">
+                      <button type="button" id="btnResetAccentColor"
+                                            class="btn btn-sm btn-outline-secondary py-0 px-2">自动</button>
+                    </span>
+                  </label>
+                  <div class="small text-muted mt-1">
+                    画布中所有文字的颜色：轨道按键、连击数、判定、分数等。
+                  </div>
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label d-flex justify-content-between align-items-center mb-0">
+                    判定线颜色
+                    <span class="d-flex align-items-center gap-1">
+                      <input type="color" id="judgeLineColor" class="form-control form-control-color"
+                                                              style="width:2.5em;height:1.8em;padding:2px;">
+                      <button type="button" id="btnResetJudgeLineColor"
+                                            class="btn btn-sm btn-outline-secondary py-0 px-2">自动</button>
+                    </span>
+                  </label>
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label d-flex justify-content-between align-items-center mb-0">
+                    轨道分隔线颜色
+                    <span class="d-flex align-items-center gap-1">
+                      <input type="color" id="laneLineColor" class="form-control form-control-color"
+                                                             style="width:2.5em;height:1.8em;padding:2px;">
+                      <button type="button" id="btnResetLaneLineColor"
+                                            class="btn btn-sm btn-outline-secondary py-0 px-2">自动</button>
+                    </span>
+                  </label>
+                  <div class="small text-muted mt-1">
+                    如果在背景图片上不易看清，请使用对比度更高的颜色。
+                  </div>
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label d-flex justify-content-between">
+                    判定偏移 <span id="judgeOffsetVal">0ms</span>
+                  </label>
+                  <input type="range" class="form-range" id="judgeOffset"
+                                                         min="-200" max="200" step="5" value="0">
+                  <div class="small text-muted mt-1">
+                    如果音频延迟请增大数值，提前则减小数值。
+                  </div>
+                </div>
+
+                <div class="mb-3">
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="perspectiveEnabled" checked>
+                    <label class="form-check-label" for="perspectiveEnabled">透视效果（顶部更窄）</label>
+                  </div>
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label">背景</label>
+                  <select class="form-select form-select-sm mb-2" id="backgroundPreset">
+                    <option value="">无</option>
+                    <option value="/flip-flap-notes/data/nasa-blue-marble.webp">图片 1：NASA 蓝色弹珠</option>
+                    <option value="/flip-flap-notes/data/nasa-galaxy.webp">图片 2：NASA 星系</option>
+                    <option value="/flip-flap-notes/data/nasa-drift-ice.webp">图片 3：NASA 浮冰</option>
+                    <option value="/flip-flap-notes/data/japan-river.webp">图片 4：日本河流</option>
+                    <option value="/flip-flap-notes/data/japan-lake.webp">图片 5：日本湖泊</option>
+                    <option value="/flip-flap-notes/data/japan-sky.webp">图片 6：日本天空</option>
+                    <option value="/flip-flap-notes/data/japan-mountain.webp" selected>图片 7：日本山脉</option>
+                    <option value="/flip-flap-notes/data/japan-pagoda.webp">图片 8：日本佛塔</option>
+                    <option value="/flip-flap-notes/data/japan-cave.webp">图片 9：日本洞窟</option>
+                    <option value="/flip-flap-notes/data/japan-shrine.webp">图片 10：日本神社</option>
+                    <option value="/flip-flap-notes/data/fantasy-forest.webp">图片 11：奇幻森林</option>
+                    <option value="/flip-flap-notes/data/fantasy-lake.webp">图片 12：奇幻湖泊</option>
+                    <option value="/flip-flap-notes/data/fantasy-sea.webp">图片 13：奇幻海洋</option>
+                    <option value="/flip-flap-notes/data/fantasy-flare.webp">图片 14：奇幻光耀</option>
+                    <option value="/flip-flap-notes/data/cyber-space.webp">图片 15：赛博空间</option>
+                    <option value="/flip-flap-notes/data/cyber-network.webp">图片 16：赛博网络</option>
+                    <option value="/flip-flap-notes/data/cyber-magic.webp">图片 17：赛博魔法</option>
+                    <option value="/flip-flap-notes/data/movie-earth.webm">影片 1：地球</option>
+                    <option value="/flip-flap-notes/data/movie-matrix-code.webm">影片 2：矩阵代码</option>
+                    <option value="/flip-flap-notes/data/movie-number-stream.webm">影片 3：数字流</option>
+                    <option value="/flip-flap-notes/data/movie-water.webm">影片 4：水</option>
+                    <option value="custom">自定义文件…</option>
+                  </select>
+                  <input class="form-control form-control-sm"
+                         type="file" id="backgroundFile" accept="image/*,video/*">
+                </div>
+
+                <hr class="my-4">
+
+                <div class="mb-3">
+                  <label class="form-label">重置</label>
+                  <div>
+                    <button type="button" id="btnResetAllSettings" class="btn btn-sm btn-outline-danger">
+                      重置所有设置
+                    </button>
+                  </div>
+                  <div class="small text-muted mt-1">
+                    清除所有已保存的设置（主题、颜色、按键、自定义背景等），然后重新加载页面。
+                    此操作无法撤销。
+                  </div>
+                </div>
+
+              </div><!-- /settingsBody (modal-body) -->
+
+              <div class="modal-footer" id="settingsFooter">
+                <button type="button" id="btnCancelSettings" class="btn btn-outline-secondary"
+                                                             data-bs-dismiss="modal">取消</button>
+                <button type="button" id="btnApplySettings" class="btn btn-primary">应用并关闭</button>
+              </div>
+
+            </div><!-- /settingsPanel (modal-content) -->
+          </div><!-- /modal-dialog -->
+        </div><!-- /screenSettings -->
+
+      </div><!-- /canvasWrap -->
+
+      <!-- MIDI 库（Bootstrap 模态框） -->
+      <div class="modal" id="screenLibrary" tabindex="-1" aria-labelledby="screenLibraryLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title fw-bold text-warning-emphasis" id="screenLibraryLabel">🎼 MIDI 库</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+              <div id="libraryCollections" class="d-flex flex-wrap gap-1 mb-2 d-none"></div>
+              <div id="libraryInstruments" class="d-flex flex-wrap gap-1 mb-2 d-none"></div>
+              <div class="toolbar d-flex justify-content-end align-items-center gap-2">
+                <div>技术支持：<a href="https://marmooo.github.io/free-midi/">Free MIDI</a></div>
+                <div id="libraryColumns" class="small"></div>
+              </div>
+              <div class="table-responsive text-nowrap">
+                <table id="libraryTable" class="table table-striped table-hover table-bordered table-sm align-middle w-100">
+                  <thead><!-- drop-inline-css !-->
+                    <tr><th></th></tr>
+                    <tr><td></td></tr>
+                  </thead>
+                  <tbody>
+                    <tr><th></th></tr>
+                    <tr><td></td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div id="libraryPagination" class="d-flex justify-content-center"></div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /screenLibrary -->
+
+      <!-- SoundFont 库（Bootstrap 模态框） -->
+      <div class="modal" id="soundFontLibraryModal" tabindex="-1" aria-labelledby="soundFontLibraryModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title fw-bold text-warning-emphasis" id="soundFontLibraryModalLabel">🎺 SoundFont 库</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+              <form id="soundFontLibraryList" class="d-flex flex-column gap-1">加载中…</form>
+            </div>
+          </div>
+        </div>
+      </div><!-- /soundFontLibraryModal -->
+
+    </div>
+
+    <!-- game.js 使用的 i18n 字符串（警告/错误信息、分析进度标签等，
+         这些动态文本不以 HTML 元素形式保存。本地化时只需替换此区块。） -->
+    <div id="i18nStrings" hidden>
+      <span data-key="randomMidi">🎲 随机 MIDI</span>
+      <span data-key="randomMidiLoading">⏳ 加载中…</span>
+      <span data-key="randomMidiStillLoading">MIDI 库仍在加载中，请稍后再试。</span>
+      <span data-key="randomMidiNoCandidates">库中未找到超过 1 分钟的曲目。</span>
+      <span data-key="randomMidiLoadFailedPrefix">随机 MIDI 加载失败：</span>
+      <span data-key="unsupportedFileType">不支持的文件类型（支持 MIDI / SoundFont / 音频文件）</span>
+      <span data-key="beatmapGenerationFailedPrefix">谱面生成失败：</span>
+      <span data-key="audioNotLoaded">音频尚未加载</span>
+      <span data-key="analyzeTimeout">分析超时（{seconds} 秒）。工作线程可能已崩溃。</span>
+      <span data-key="noOnsetDetected">未检测到有效的音符起始点（onset）。音频可能是静音、过短或音量过低。</span>
+      <span data-key="analyzeWorkerErrorPrefix">分析工作线程错误：</span>
+      <span data-key="analyzeWorkerErrorUnknown">分析工作线程错误（详情未知，请查看控制台）</span>
+      <span data-key="soundFontLoadFailed">（加载失败）</span>
+      <span data-key="stage-stft">正在分析频率…</span>
+      <span data-key="stage-onset">正在检测音符起始点…</span>
+      <span data-key="stage-tempo">正在估算节拍…</span>
+      <span data-key="stage-grid">正在对齐节拍…</span>
+      <span data-key="stage-notes">正在生成音符…</span>
+      <span data-key="stage-done">完成</span>
+      <span data-key="stage-default">正在分析…</span>
+    </div>
+
+    <div class="drop-inline-css
+      modal-backdrop show gap-1
+      form-control form-control-sm is-invalid
+      pagination page-item page-link active
+      btn-check btn btn-sm btn-outline-primary btn-outline-secondary m-1
+      list-group shadow-sm list-group-item py-1 px-2
+      d-none"></div>
+    <script type="module" src="/flip-flap-notes/index.js"></script>
+  </body>
+</html>
