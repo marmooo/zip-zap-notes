@@ -177,6 +177,7 @@ const canvasWrap = document.getElementById("canvasWrap");
 let noteCanvas = document.getElementById("noteCanvas");
 let particleCanvas = document.getElementById("particleCanvas");
 let uiCanvas = document.getElementById("uiCanvas");
+const activePointers = new Map();
 const screenStart = document.getElementById("screenStart");
 const screenReady = document.getElementById("screenReady");
 const screenAnalyzing = document.getElementById("screenAnalyzing");
@@ -522,6 +523,7 @@ function initWorker() {
 }
 
 function replaceCanvases() {
+  activePointers.clear();
   for (const id of ["noteCanvas", "particleCanvas", "uiCanvas"]) {
     const old = document.getElementById(id);
     const neo = document.createElement("canvas");
@@ -551,6 +553,7 @@ let deathTimeoutId = null;
 function finishDeath() {
   clearTimeout(deathTimeoutId);
   deathTimeoutId = null;
+  activePointers.clear();
   if (gamePhase !== "playing") return;
   stopRaf();
   showResult();
@@ -1574,17 +1577,95 @@ document.addEventListener("keydown", (e) => {
 
 // ---------------------------------------------------------------------------
 // タッチ・ポインター入力（MIDI/音声共通）
-// 画面の左半分をタップすると 1 レーン左へ、右半分をタップすると 1 レーン右へ移動する。
+// - 画面をタップ（手を離した瞬間）すると、左半分なら 1 レーン左へ、右半分なら 1 レーン右へ移動する。
+// - 画面をドラッグすると、その位置（レーン）に自機が移動する（ドラッグ中は指の位置に追従）。
+// - ドラッグが行われた場合はタップ判定（手を離した瞬間の左右移動）は行われない。
 // ---------------------------------------------------------------------------
+
+const DRAG_THRESHOLD = 8; // ドラッグと判定する移動距離（論理px）
+
+function getLaneFromCoords(canvas, clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return 0;
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
+  const p = (config.perspectiveEnabled ?? true) ? PERSPECTIVE : 0;
+  const clampedY = Math.max(0, Math.min(rect.height, y));
+  const scale = p ? 1 - p + p * (clampedY / rect.height) : 1;
+  const normX = 0.5 + (x / rect.width - 0.5) / Math.max(0.01, scale);
+  const lane = Math.floor(normX * config.laneCount);
+  return Math.max(0, Math.min(config.laneCount - 1, lane));
+}
 
 function bindPointerEvents(canvas) {
   canvas.addEventListener("pointerdown", (e) => {
     if (gamePhase !== "playing" || isPaused) return;
     e.preventDefault();
     canvas.focus({ preventScroll: true });
-    const rect = canvas.getBoundingClientRect();
-    const dir = e.clientX - rect.left < rect.width / 2 ? -1 : 1;
-    worker?.postMessage({ type: "moveLane", dir });
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    activePointers.set(e.pointerId, {
+      startX: e.clientX,
+      startY: e.clientY,
+      isDragging: false,
+      lastLane: null,
+    });
+  });
+
+  canvas.addEventListener("pointermove", (e) => {
+    const info = activePointers.get(e.pointerId);
+    if (!info) return;
+    if (gamePhase !== "playing" || isPaused) return;
+    e.preventDefault();
+
+    if (!info.isDragging) {
+      const dx = e.clientX - info.startX;
+      const dy = e.clientY - info.startY;
+      if (Math.hypot(dx, dy) >= DRAG_THRESHOLD) {
+        info.isDragging = true;
+      }
+    }
+
+    if (info.isDragging) {
+      const lane = getLaneFromCoords(canvas, e.clientX, e.clientY);
+      if (lane !== info.lastLane) {
+        info.lastLane = lane;
+        worker?.postMessage({ type: "setLane", lane });
+      }
+    }
+  });
+
+  const onPointerUp = (e) => {
+    const info = activePointers.get(e.pointerId);
+    if (!info) return;
+    activePointers.delete(e.pointerId);
+    try {
+      canvas.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    if (gamePhase !== "playing" || isPaused) return;
+    e.preventDefault();
+
+    if (!info.isDragging) {
+      // ドラッグせずに手を離した（左右タップ）
+      const rect = canvas.getBoundingClientRect();
+      const dir = e.clientX - rect.left < rect.width / 2 ? -1 : 1;
+      worker?.postMessage({ type: "moveLane", dir });
+    }
+  };
+
+  canvas.addEventListener("pointerup", onPointerUp);
+  canvas.addEventListener("pointercancel", (e) => {
+    activePointers.delete(e.pointerId);
+    try {
+      canvas.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
   });
 }
 bindPointerEvents(uiCanvas);
@@ -1599,6 +1680,7 @@ bindPointerEvents(uiCanvas);
 
 function updatePauseUi(paused) {
   isPaused = paused;
+  if (paused) activePointers.clear();
   pauseOverlay.classList.toggle("hidden", !paused);
   btnPause.innerHTML = paused ? ICON_PLAY : ICON_PAUSE;
 }

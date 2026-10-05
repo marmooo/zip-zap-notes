@@ -1053,6 +1053,18 @@ export class RhythmGame {
     this.#uiDirty = true;
   }
 
+  /** lane: 0〜laneCount-1 の整数で指定レーンに直接移動 */
+  setLane(lane) {
+    if (this.#gameOver) return;
+    const target = Math.max(
+      0,
+      Math.min(this.#opts.laneCount - 1, Math.round(lane)),
+    );
+    if (target === this.#playerLane) return;
+    this.#playerLane = target;
+    this.#uiDirty = true;
+  }
+
   resize(w, h, extra = {}) {
     this.#canvas.width = w;
     this.#canvas.height = h;

@@ -2,7 +2,7 @@
  * rhythm-game-worker.js
  * Worker adapter for RhythmGame (Flip Flap Dodge).
  *
- * main → worker : init / setNotes / start / tick / stop / moveLane /
+ * main → worker : init / setNotes / start / tick / stop / moveLane / setLane /
  *                 updateOptions / resize
  * worker → main : noteCount / judgment / judgmentDetail / ended /
  *                 dying（HP 0 になった瞬間） / gameOver（死亡演出が終わった）
@@ -90,6 +90,11 @@ self.onmessage = (e) => {
 
     case "moveLane": {
       if (game) game.moveLane(msg.dir);
+      break;
+    }
+
+    case "setLane": {
+      if (game) game.setLane(msg.lane);
       break;
     }
 
