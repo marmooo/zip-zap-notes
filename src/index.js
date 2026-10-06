@@ -294,6 +294,7 @@ function emptyResult(total) {
   };
 }
 let lastResult = emptyResult(0);
+let currentHp = 100;
 let pendingAnalysisResolve = null;
 let pendingAnalysisReject = null;
 
@@ -444,6 +445,8 @@ function buildWorkerOptions() {
     judgeLineColor: config.judgeLineColor || "",
     laneLineColor: config.laneLineColor || "",
     accentColor: config.accentColor || "",
+    // 現在の残り体力（プレイ中の設定変更による再構築でも復活させず引き継ぐ）
+    initialHp: currentHp,
     // canvas 座標系（dpr込み）での navbar 回避量。HUD 描画開始 y に加算する。
     topInset: computeTopInset(),
   };
@@ -594,6 +597,11 @@ function onWorkerMessage(e) {
       lastResult.score = msg.score;
       lastResult.combo = Math.max(lastResult.combo, msg.combo);
       break;
+    case "hp":
+      currentHp = msg.hp;
+      lastResult.hp = msg.hp;
+      lastResult.maxHp = msg.maxHp;
+      break;
     case "dying":
       // HP が 0 になった瞬間。死亡演出（爆発）を見せる間は音楽を先に落とす。
       // 結果画面へは Worker が演出後に送る "gameOver" で遷移する。
@@ -609,6 +617,7 @@ function onWorkerMessage(e) {
       break;
     case "judgmentDetail":
       lastResult = { ...lastResult, ...msg };
+      if (msg.hp !== undefined) currentHp = msg.hp;
       break;
     case "noteCount":
       document.getElementById("noteCountLabel").textContent = msg.count;
@@ -913,6 +922,7 @@ function beginPlayback() {
   // 音量の復元は startMidiPlayback() 内（midy.start() 直前）で行うため、
   // ここでは MIDI モードの setMasterVolume は不要。audio モードは即時復元で OK。
   if (mode === "audio") player.volume = 1;
+  currentHp = 100;
   lastResult = emptyResult(laneNotes.length);
   worker.postMessage({ type: "start" });
   gamePhase = "playing";
@@ -942,21 +952,10 @@ function applyConfigToGame(cfg) {
   const laneCountChanged = cfg.laneCount !== config.laneCount;
   const laneOrDiffChanged = laneCountChanged ||
     cfg.difficulty !== config.difficulty;
-  // レーン数・遠近感・スクロール速度など描画構造に関わる変更だけ Worker を
-  // 作り直す。色やキー割り当てだけなら updateOptions で足りるが、現状の
-  // Worker 契約は setNotes 再送と reset を兼ねた rebuild の方が安全なため、
-  // 構造変更時のみ rebuild、それ以外のプレイ中変更は rebuild せずオプション更新。
   const dprChanged = Number(cfg.maxPixelRatio) !== Number(config.maxPixelRatio);
-  const structuralChanged = laneCountChanged ||
-    dprChanged ||
-    (cfg.perspectiveEnabled ?? true) !== (config.perspectiveEnabled ?? true) ||
-    cfg.scrollSpeed !== config.scrollSpeed ||
-    (cfg.laneOpacity ?? 0.35) !== (config.laneOpacity ?? 0.35) ||
-    JSON.stringify(cfg.laneColors?.slice(0, cfg.laneCount)) !==
-      JSON.stringify(config.laneColors?.slice(0, config.laneCount));
 
   config = cfg;
-  // maxPixelRatio 変更時は実効 dpr を更新（構造変更時は後続の buildGame で反映）
+  // maxPixelRatio 変更時は実効 dpr を更新（構造変更時は後続の buildGame / resize で反映）
   if (dprChanged) dpr = computeDpr();
   // MIDI サンプルキャッシュ粒度（再生中でも次回ボイス生成から効く）
   if (typeof midy !== "undefined" && CACHE_MODES.includes(config.cacheMode)) {
@@ -970,18 +969,23 @@ function applyConfigToGame(cfg) {
   }
 
   if (gamePhase === "playing" && !endingFadeStarted) {
-    if (structuralChanged || laneOrDiffChanged) {
-      // 譜面配置やレーン構造が変わるので Worker を立て直して notes を再送
+    if (laneOrDiffChanged) {
+      // 譜面配置やレーン構造が変わるので Worker を立て直して notes を再送。
+      // ただし、減った体力（currentHp）は確実に維持して引き継ぐ（設定保存で全快するバグを防ぐ）。
+      const hpToPreserve = currentHp;
       stopRaf();
       buildGame();
       applyNotes();
-      worker.postMessage({ type: "start" });
-      lastResult = emptyResult(laneNotes.length);
+      worker.postMessage({ type: "start", preserveHp: true });
+      worker.postMessage({ type: "setHp", hp: hpToPreserve });
+      lastResult.hp = hpToPreserve;
       startRaf();
       gamePhase = "playing";
     } else {
-      // 色・オフセット等のみ：既存 Worker にパッチを送るだけ（Canvas 再確保しない）
+      // 色・スクロール速度・遠近感・透明度・オフセット・DPR 等：
+      // 既存 Worker にパッチを送るだけ（Worker や Canvas を再作成しないため、HP や進行度はそのまま維持される）
       syncScoreColor();
+      if (dprChanged) resizeCanvases();
       worker?.postMessage({
         type: "updateOptions",
         patch: {
@@ -992,13 +996,15 @@ function applyConfigToGame(cfg) {
           laneLineColor: config.laneLineColor || "",
           accentColor: config.accentColor || "",
           laneOpacity: config.laneOpacity ?? 0.35,
+          scrollSpeed: config.scrollSpeed,
+          perspective: (config.perspectiveEnabled ?? true) ? PERSPECTIVE : 0,
         },
       });
     }
   } else if (gamePhase !== "playing") {
     // 非プレイ中は構造が変わっていなくても設定プレビュー用に Worker を
     // 揃えておく。ただし既に Worker があり構造不変なら rebuild 不要。
-    if (!worker || structuralChanged || laneOrDiffChanged) {
+    if (!worker || laneOrDiffChanged || dprChanged) {
       buildGame();
     } else {
       syncScoreColor();

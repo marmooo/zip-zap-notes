@@ -880,6 +880,7 @@ export class RhythmGame {
   onEnded = null; // 譜面を最後まで生き延びた
   onDeath = null; // HP が 0 になった瞬間（音楽を止める用）
   onGameOver = null; // 死亡演出が終わった（結果画面へ）
+  onHpChange = null; // HP が変化したとき (hp, maxHp) => void
 
   #endedFired = false;
   #gameOverFired = false;
@@ -906,6 +907,7 @@ export class RhythmGame {
   #hitCount = 0;
   #hp = 100;
   #maxHp = 100;
+  #lastSentHp = 100;
   #gameOver = false;
   #deathT = 0; // 死亡時のゲーム時刻（描画をここで止める）
   #deathElapsed = 0;
@@ -974,7 +976,10 @@ export class RhythmGame {
       aimSlack: options.aimSlack ?? AIM_SLACK,
     };
     this.#maxHp = this.#opts.maxHp;
-    this.#hp = this.#maxHp;
+    this.#hp = options.initialHp !== undefined
+      ? Math.max(0, Math.min(this.#maxHp, Number(options.initialHp) || 0))
+      : this.#maxHp;
+    this.#lastSentHp = this.#hp;
     this.#playerLane = laneCount >> 1;
     this.#playerVisX = this.#playerLane;
   }
@@ -1004,8 +1009,8 @@ export class RhythmGame {
     return this.#notes.length;
   }
 
-  start(getTime) {
-    this.#resetState();
+  start(getTime, startOpts = {}) {
+    this.#resetState(startOpts?.preserveHp ?? false);
     this.#getTime = getTime ??
       (() => (performance.now() - this.#lastFrameMs) / 1000);
     this.#lastFrameMs = performance.now();
@@ -1063,6 +1068,16 @@ export class RhythmGame {
     if (target === this.#playerLane) return;
     this.#playerLane = target;
     this.#uiDirty = true;
+  }
+
+  /** HP を直接設定する（上限 maxHp、下限 0） */
+  setHp(hp) {
+    this.#hp = Math.max(0, Math.min(this.#maxHp, Number(hp) || 0));
+    this.#lastSentHp = this.#hp;
+    this.#uiDirty = true;
+    if (this.#hp <= 0 && !this.#gameOver) {
+      this.#die();
+    }
   }
 
   resize(w, h, extra = {}) {
@@ -1183,10 +1198,13 @@ export class RhythmGame {
     this.#aimIndex = 0;
   }
 
-  #resetState() {
+  #resetState(preserveHp = false) {
     this.#score = this.#combo = this.#maxCombo = 0;
     this.#dodgeCount = this.#hitCount = 0;
-    this.#hp = this.#maxHp;
+    if (!preserveHp) {
+      this.#hp = this.#maxHp;
+    }
+    this.#lastSentHp = this.#hp;
     this.#gameOver = false;
     this.#deathT = 0;
     this.#deathElapsed = 0;
@@ -1463,6 +1481,10 @@ export class RhythmGame {
     if (this.#hp <= 0) {
       this.#hp = 0;
       this.#die();
+    }
+    if (Math.abs(this.#hp - this.#lastSentHp) >= 0.5 || this.#hp === 0) {
+      this.#lastSentHp = this.#hp;
+      this.onHpChange?.(this.#hp, this.#maxHp);
     }
   }
 

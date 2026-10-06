@@ -3,8 +3,8 @@
  * Worker adapter for RhythmGame (Flip Flap Dodge).
  *
  * main → worker : init / setNotes / start / tick / stop / moveLane / setLane /
- *                 updateOptions / resize
- * worker → main : noteCount / judgment / judgmentDetail / ended /
+ *                 setHp / updateOptions / resize
+ * worker → main : noteCount / judgment / judgmentDetail / hp / ended /
  *                 dying（HP 0 になった瞬間） / gameOver（死亡演出が終わった）
  */
 
@@ -38,6 +38,9 @@ self.onmessage = (e) => {
         },
         msg.options ?? {},
       );
+      game.onHpChange = (hp, maxHp) => {
+        self.postMessage({ type: "hp", hp, maxHp });
+      };
       game.onJudgment = (judgment, combo, score) => {
         self.postMessage({ type: "judgment", judgment, combo, score });
       };
@@ -65,7 +68,7 @@ self.onmessage = (e) => {
     }
 
     case "start": {
-      if (game) game.resetState();
+      if (game) game.resetState(!!msg.preserveHp);
       break;
     }
 
@@ -95,6 +98,11 @@ self.onmessage = (e) => {
 
     case "setLane": {
       if (game) game.setLane(msg.lane);
+      break;
+    }
+
+    case "setHp": {
+      if (game) game.setHp(msg.hp);
       break;
     }
 
