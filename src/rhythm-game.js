@@ -1769,8 +1769,13 @@ export class RhythmGame {
     // 画面下端より下まで抜けたノートは以降スキップ
     while (this.#drawCursor < notes.length) {
       const n = notes[this.#drawCursor];
-      const yTop = hitY - (n.endTime - t) * speed;
-      if (yTop > H) {
+      // 短いタップは固定高さ（BLOCK_MIN_DURATION）で描くため startTime、
+      // 長いホールドは実長があるため endTime を終端に使う。
+      const tailTime = n.endTime - n.startTime > BLOCK_MIN_DURATION
+        ? n.endTime
+        : n.startTime;
+      const yBotTail = hitY - (tailTime - t) * speed;
+      if (yBotTail > H) {
         this.#drawCursor++;
         continue;
       }
