@@ -201,7 +201,12 @@ function showPlayHud() {
   btnPause.classList.remove("hidden");
   btnPause.innerHTML = ICON_PAUSE;
   scoreDisplay?.classList.remove("hidden");
-  if (scoreDisplay) scoreDisplay.textContent = "0000000";
+  updateScoreDisplay(0);
+}
+function updateScoreDisplay(score) {
+  if (!scoreDisplay) return;
+  const text = String(Math.round(Number(score) || 0)).padStart(7, "0");
+  if (scoreDisplay.textContent !== text) scoreDisplay.textContent = text;
 }
 function hidePlayHud() {
   pauseOverlay.classList.add("hidden");
@@ -599,6 +604,7 @@ function onWorkerMessage(e) {
     case "judgment":
       lastResult.score = msg.score;
       lastResult.combo = Math.max(lastResult.combo, msg.combo);
+      updateScoreDisplay(msg.score);
       break;
     case "hp":
       currentHp = msg.hp;
@@ -620,6 +626,7 @@ function onWorkerMessage(e) {
       break;
     case "judgmentDetail":
       lastResult = { ...lastResult, ...msg };
+      updateScoreDisplay(msg.score);
       if (msg.hp !== undefined) currentHp = msg.hp;
       break;
     case "noteCount":
@@ -746,15 +753,6 @@ function startRaf() {
   if (rafId !== null) return;
   function loop() {
     gameLogicTick();
-    // スコアは "judgment" メッセージで lastResult.score に随時反映されるが、
-    // DOM 表示（#scoreDisplay）への書き戻しは毎フレームここでまとめて行う
-    // （以前は Canvas 側で毎フレーム再描画していたのと同じ頻度・同じ場所）。
-    if (scoreDisplay) {
-      scoreDisplay.textContent = String(
-        Math.round(Number(lastResult.score) || 0),
-      )
-        .padStart(7, "0");
-    }
     // handleShortEnding() が showResult()→stopRaf() を呼んで rafId を null に
     // していたら、ここで再度スケジュールしてしまわないようにする。
     if (rafId !== null) rafId = requestAnimationFrame(loop);
@@ -762,10 +760,11 @@ function startRaf() {
   rafId = requestAnimationFrame(loop);
 
   // タブがバックグラウンドだと rAF が停止／大幅間引きされる。
-  // Worker のノート進行・ended 判定、SHORT の maxDuration 到達判定が止まるため、
-  // setInterval でも同じロジックを回す（裏で音楽が鳴っていても終了→スコア画面へ）。
+  // 非表示中だけ setInterval でも同じロジックを回す。前景中は rAF と重複させない。
   if (tickIntervalId === null) {
-    tickIntervalId = setInterval(gameLogicTick, 250);
+    tickIntervalId = setInterval(() => {
+      if (document.hidden) gameLogicTick();
+    }, 250);
   }
 }
 function stopRaf() {
