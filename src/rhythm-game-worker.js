@@ -88,6 +88,10 @@ self.onmessage = (e) => {
         }
         game.stop();
       }
+      self.postMessage({
+        type: "stopped",
+        finalize: msg.finalize !== false,
+      });
       break;
     }
 
