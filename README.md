@@ -6,6 +6,8 @@ the falling blocks and survive to the end of the song before your HP runs out.
 You can also play MIDI files directly and change the sound source using
 SoundFonts (SF2/SF3).
 
+- [フリーゲーム夢現](https://freegame-mugen.jp/puzzle/game_15871.html)
+
 ## Screenshots
 
 Title Screen ![Title Screen](screenshots/mugen/01.png)
