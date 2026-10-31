@@ -7,6 +7,7 @@ You can also play MIDI files directly and change the sound source using
 SoundFonts (SF2/SF3).
 
 - [フリーゲーム夢現](https://freegame-mugen.jp/puzzle/game_15871.html)
+- [itch.io](https://marmooo-games.itch.io/zip-zap-notes)
 
 ## Screenshots
 
