@@ -41,8 +41,15 @@ self.onmessage = (e) => {
       game.onHpChange = (hp, maxHp) => {
         self.postMessage({ type: "hp", hp, maxHp });
       };
-      game.onJudgment = (judgment, combo, score) => {
-        self.postMessage({ type: "judgment", judgment, combo, score });
+      game.onJudgment = (judgment, combo, score, detail = {}) => {
+        self.postMessage({
+          type: "judgment",
+          judgment,
+          combo,
+          score,
+          lane: detail.lane,
+          duration: detail.duration,
+        });
       };
       game.onEnded = () => {
         // 詳細カウントを送ってから ended

@@ -1473,7 +1473,14 @@ export class RhythmGame {
         lane: this.#playerLane,
         alpha: 1,
       });
-      this.onJudgment?.(Judgment.HIT, this.#combo, this.score);
+      const duration = Math.max(
+        0,
+        (Number(note.endTime) || 0) - (Number(note.startTime) || 0),
+      );
+      this.onJudgment?.(Judgment.HIT, this.#combo, this.score, {
+        lane: this.#playerLane,
+        duration,
+      });
     }
     this.#hp -= this.#opts.damagePerSecond * dg;
     this.#hitFlash = Math.max(this.#hitFlash, 0.18);
@@ -1503,7 +1510,14 @@ export class RhythmGame {
     this.#spawnDodgeParticles(center);
     this.#judgmentFx.push({ judgment: Judgment.DODGE, lane: center, alpha: 1 });
     this.#uiDirty = true;
-    this.onJudgment?.(Judgment.DODGE, this.#combo, this.score);
+    const duration = Math.max(
+      0,
+      (Number(note.endTime) || 0) - (Number(note.startTime) || 0),
+    );
+    this.onJudgment?.(Judgment.DODGE, this.#combo, this.score, {
+      lane: center,
+      duration,
+    });
   }
 
   #die() {

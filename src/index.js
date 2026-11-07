@@ -304,6 +304,12 @@ function emptyResult(total) {
   };
 }
 let lastResult = emptyResult(0);
+// Binary dodge/hit timeline for the result score card.
+let playHistory = [];
+// HP samples over the run (for score-card trajectory). Pushed on every "hp" msg.
+let hpHistory = [];
+// performance.now() at the moment the current run started (for shared timeline).
+let playStartPerf = 0;
 let currentHp = 100;
 let pendingAnalysisResolve = null;
 let pendingAnalysisReject = null;
@@ -604,6 +610,13 @@ function onWorkerMessage(e) {
   const msg = e.data;
   switch (msg.type) {
     case "judgment":
+      playHistory.push({
+        judgment: msg.judgment,
+        lane: msg.lane,
+        duration: msg.duration,
+        t: performance.now() - playStartPerf,
+        hp: currentHp,
+      });
       lastResult.score = msg.score;
       lastResult.combo = Math.max(lastResult.combo, msg.combo);
       updateScoreDisplay(msg.score);
@@ -612,6 +625,12 @@ function onWorkerMessage(e) {
       currentHp = msg.hp;
       lastResult.hp = msg.hp;
       lastResult.maxHp = msg.maxHp;
+      // Record for score-card HP trajectory (throttled by worker ~0.5 HP steps)
+      hpHistory.push({
+        hp: msg.hp,
+        maxHp: msg.maxHp,
+        t: performance.now() - playStartPerf,
+      });
       break;
     case "dying":
       // HP が 0 になった瞬間。死亡演出（爆発）を見せる間は音楽を先に落とす。
@@ -938,6 +957,9 @@ function beginPlayback() {
   // ここでは MIDI モードの setMasterVolume は不要。audio モードは即時復元で OK。
   if (mode === "audio") player.volume = 1;
   currentHp = 100;
+  playHistory = [];
+  playStartPerf = performance.now();
+  hpHistory = [{ hp: 100, maxHp: 100, t: 0 }];
   lastResult = emptyResult(laneNotes.length);
   worker.postMessage({ type: "start" });
   gamePhase = "playing";
@@ -1199,8 +1221,465 @@ function showResult() {
   if (rLanes) rLanes.textContent = String(config.laneCount);
   if (rScroll) rScroll.textContent = String(config.scrollSpeed);
 
+  drawScoreCard(grade, rateStr, dead);
+
   showScreen("result");
 }
+
+function drawScoreCard(grade, dodgeRate, dead) {
+  const canvas = document.getElementById("scoreCardCanvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  // Dodge runs are mostly success, so a bead-per-event or merged teal arcs
+  // all look the same. Instead: polar "streak fingerprint" —
+  // angle = progress through the run, radius = current dodge streak.
+  // Hits slam the curve to the baseline. Every run gets a unique silhouette.
+  // Layered behind it: remaining-HP annular fill (faint red) + lane-route glow.
+  const palette = {
+    dodge: "#66ffcc",
+    zap: "#66b8ff",
+    hit: "#ff5b61",
+    mute: "#aab5b5",
+    ink: "#f5f4ec",
+    dim: "#ffffff14",
+    hpFill: "#ff5b61",
+  };
+  const gradeColors = {
+    S: "#ffd166",
+    A: "#64d98b",
+    B: "#66b8ff",
+    C: "#ff9a64",
+    D: "#ff5b61",
+  };
+  const accent = dead ? palette.hit : (gradeColors[grade] || palette.dodge);
+
+  const bg = ctx.createLinearGradient(0, 0, w, h);
+  bg.addColorStop(0, "#10151b");
+  bg.addColorStop(0.58, "#151d22");
+  bg.addColorStop(1, "#0d1116");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, w, h);
+  const glow = ctx.createRadialGradient(870, 315, 10, 870, 315, 560);
+  glow.addColorStop(0, dead ? "#ff5b6118" : "#66ffcc16");
+  glow.addColorStop(1, "#0000");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, w, h);
+
+  ctx.fillStyle = accent;
+  ctx.beginPath();
+  ctx.arc(66, 70, 10, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.font = "800 64px system-ui, sans-serif";
+  ctx.fillStyle = palette.ink;
+  ctx.fillText("Zip ", 88, 101);
+  const zapX = 88 + ctx.measureText("Zip ").width;
+  ctx.fillStyle = palette.zap;
+  ctx.fillText("Zap ", zapX, 101);
+  const notesX = zapX + ctx.measureText("Zap ").width;
+  ctx.fillStyle = palette.ink;
+  ctx.fillText("Notes", notesX, 101);
+  ctx.font = "600 22px system-ui, sans-serif";
+  ctx.fillStyle = palette.mute;
+  const status = dead
+    ? `GAME OVER  ·  ${Math.floor((lastResult.progress || 0) * 100)}%`
+    : "CLEAR";
+  ctx.fillText(
+    `${config.difficulty}   ·   ${config.laneCount} LANES   ·   ${status}`,
+    88,
+    141,
+  );
+
+  const history = playHistory.slice(-160);
+  ctx.font = "700 22px system-ui, sans-serif";
+  ctx.fillStyle = palette.mute;
+  ctx.fillText("SCORE", 76, 190);
+  ctx.font = "800 72px ui-monospace, SFMono-Regular, Menlo, monospace";
+  ctx.fillStyle = palette.ink;
+  ctx.fillText(String(lastResult.score).padStart(7, "0"), 72, 250);
+  ctx.font = "700 22px system-ui, sans-serif";
+  ctx.fillStyle = palette.mute;
+  ctx.fillText("DODGE RATE", 76, 310);
+  ctx.font = "800 68px system-ui, sans-serif";
+  ctx.fillStyle = palette.ink;
+  ctx.fillText(`${dodgeRate}%`, 72, 370);
+  ctx.font = "700 22px system-ui, sans-serif";
+  ctx.fillStyle = palette.mute;
+  ctx.fillText("MAX STREAK", 76, 430);
+  ctx.font = "800 58px ui-monospace, SFMono-Regular, Menlo, monospace";
+  ctx.fillStyle = palette.ink;
+  ctx.fillText(String(lastResult.combo), 72, 490);
+
+  // DODGED in blue (matches Zap / other apps), HIT red, HP muted
+  const stats = [
+    ["DODGED", lastResult.dodge, palette.zap],
+    ["HIT", lastResult.hit, palette.hit],
+    ["HP", `${Math.ceil(lastResult.hp)}/${lastResult.maxHp}`, palette.mute],
+  ];
+  for (const [i, [label, value, color]] of stats.entries()) {
+    const x = 76 + i * 130;
+    ctx.font = "700 20px system-ui, sans-serif";
+    ctx.fillStyle = color;
+    ctx.fillText(label, x, 550);
+    ctx.font = "800 30px system-ui, sans-serif";
+    ctx.fillText(String(value), x, 580);
+  }
+
+  const center = { x: 870, y: 315 };
+  const baseR = 168; // just outside the rank disc
+  const maxR = 300;
+  const peak = Math.max(1, Number(lastResult.combo) || 1);
+  const laneCount = Math.max(1, Number(config.laneCount) || 6);
+
+  // Reconstruct running streak after each event → polar samples.
+  // Also keep lane + wall-clock t so HP and hit spikes share one timeline.
+  const samples = [];
+  let streak = 0;
+  for (let i = 0; i < history.length; i++) {
+    const key = String(history[i].judgment).toLowerCase();
+    const lane = Number(history[i].lane);
+    const hasLane = Number.isFinite(lane);
+    const evT = Number(history[i].t);
+    const t = Number.isFinite(evT) ? evT : i;
+    if (key === "hit") {
+      streak = 0;
+      samples.push({ t, streak: 0, hit: true, lane: hasLane ? lane : null });
+    } else {
+      streak += 1;
+      samples.push({ t, streak, hit: false, lane: hasLane ? lane : null });
+    }
+  }
+
+  // Shared time range across judgments and HP samples (for aligned angles).
+  const maxHpVal = Math.max(1, Number(lastResult.maxHp) || 100);
+  let hpSamples = hpHistory.length > 0
+    ? hpHistory.slice()
+    : [{ hp: Number(lastResult.hp) || 0, maxHp: maxHpVal, t: 0 }];
+  if (hpSamples.length > 240) {
+    const step = hpSamples.length / 240;
+    const thin = [];
+    for (let i = 0; i < 240; i++) {
+      thin.push(
+        hpSamples[Math.min(hpSamples.length - 1, Math.floor(i * step))],
+      );
+    }
+    hpSamples = thin;
+  }
+  let tMin = Infinity;
+  let tMax = -Infinity;
+  for (const s of samples) {
+    if (s.t < tMin) tMin = s.t;
+    if (s.t > tMax) tMax = s.t;
+  }
+  for (const s of hpSamples) {
+    const tt = Number(s.t);
+    if (!Number.isFinite(tt)) continue;
+    if (tt < tMin) tMin = tt;
+    if (tt > tMax) tMax = tt;
+  }
+  if (!Number.isFinite(tMin) || !Number.isFinite(tMax) || tMax <= tMin) {
+    tMin = 0;
+    tMax = Math.max(1, samples.length, hpSamples.length);
+  }
+  const tSpan = tMax - tMin;
+  // Angle from shared timeline so hit spikes and HP drops land on the same rays.
+  const angleAtT = (t) =>
+    -Math.PI / 2 + ((Number(t) - tMin) / tSpan) * Math.PI * 2;
+  const radiusAt = (s) => baseR + (Math.min(s, peak) / peak) * (maxR - baseR);
+  const hpRadiusAt = (hp) =>
+    baseR + (Math.max(0, Math.min(1, hp / maxHpVal))) * (maxR - baseR);
+
+  // Guide rings + hour marks.
+  for (const radius of [baseR, (baseR + maxR) / 2, maxR]) {
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = "#ffffff14";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  for (let i = 0; i < 12; i++) {
+    const angle = -Math.PI / 2 + i * Math.PI / 6;
+    ctx.beginPath();
+    ctx.moveTo(
+      center.x + Math.cos(angle) * (maxR - 6),
+      center.y + Math.sin(angle) * (maxR - 6),
+    );
+    ctx.lineTo(
+      center.x + Math.cos(angle) * (maxR + 10),
+      center.y + Math.sin(angle) * (maxR + 10),
+    );
+    ctx.strokeStyle = "#ffffff30";
+    ctx.lineWidth = i % 3 === 0 ? 2 : 1;
+    ctx.stroke();
+  }
+
+  // --- HP trajectory (polar) BEHIND the dodge graph ---
+  // Max HP = outermost (maxR), Min HP = innermost (baseR).
+  // Angle = shared wall-clock progress, radius = HP at that sample.
+  if (hpSamples.length > 0) {
+    // Filled region: curve → back along baseline
+    ctx.beginPath();
+    for (let i = 0; i < hpSamples.length; i++) {
+      const a = angleAtT(
+        hpSamples[i].t ??
+          (tMin + (i / Math.max(1, hpSamples.length - 1)) * tSpan),
+      );
+      const r = hpRadiusAt(hpSamples[i].hp);
+      const x = center.x + Math.cos(a) * r;
+      const y = center.y + Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    for (let i = hpSamples.length - 1; i >= 0; i--) {
+      const a = angleAtT(
+        hpSamples[i].t ??
+          (tMin + (i / Math.max(1, hpSamples.length - 1)) * tSpan),
+      );
+      const x = center.x + Math.cos(a) * baseR;
+      const y = center.y + Math.sin(a) * baseR;
+      ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    const hpGrad = ctx.createRadialGradient(
+      center.x,
+      center.y,
+      baseR,
+      center.x,
+      center.y,
+      maxR,
+    );
+    hpGrad.addColorStop(0, "#ff5b6128");
+    hpGrad.addColorStop(0.6, "#ff5b6148");
+    hpGrad.addColorStop(1, "#ff5b6130");
+    ctx.fillStyle = hpGrad;
+    ctx.fill();
+
+    // Stroke the HP trajectory curve
+    ctx.beginPath();
+    for (let i = 0; i < hpSamples.length; i++) {
+      const a = angleAtT(
+        hpSamples[i].t ??
+          (tMin + (i / Math.max(1, hpSamples.length - 1)) * tSpan),
+      );
+      const r = hpRadiusAt(hpSamples[i].hp);
+      const x = center.x + Math.cos(a) * r;
+      const y = center.y + Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    if (hpSamples.length > 2) {
+      const a0 = angleAtT(hpSamples[0].t ?? tMin);
+      const r0 = hpRadiusAt(hpSamples[0].hp);
+      ctx.lineTo(center.x + Math.cos(a0) * r0, center.y + Math.sin(a0) * r0);
+    }
+    ctx.strokeStyle = dead ? "#ff5b61ee" : "#ff5b61cc";
+    ctx.globalAlpha = 0.85;
+    ctx.lineWidth = 2.6;
+    ctx.lineJoin = "round";
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  if (samples.length > 0) {
+    // Filled fingerprint: baseline → curve → back. Unique silhouette per run.
+    // Angles use the shared wall-clock timeline (same as HP / hit spikes).
+    ctx.beginPath();
+    for (let i = 0; i < samples.length; i++) {
+      const a = angleAtT(samples[i].t);
+      const r = radiusAt(samples[i].streak);
+      const x = center.x + Math.cos(a) * r;
+      const y = center.y + Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    // close along the end back to baseline near the start
+    for (let i = samples.length - 1; i >= 0; i--) {
+      const a = angleAtT(samples[i].t);
+      const x = center.x + Math.cos(a) * baseR;
+      const y = center.y + Math.sin(a) * baseR;
+      ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    const fill = ctx.createRadialGradient(
+      center.x,
+      center.y,
+      baseR,
+      center.x,
+      center.y,
+      maxR,
+    );
+    fill.addColorStop(0, "#66ffcc22");
+    fill.addColorStop(0.65, "#66ffcc55");
+    fill.addColorStop(1, "#66ffcc33");
+    ctx.fillStyle = fill;
+    ctx.fill();
+
+    // Stroke the streak curve itself.
+    ctx.beginPath();
+    for (let i = 0; i < samples.length; i++) {
+      const a = angleAtT(samples[i].t);
+      const r = radiusAt(samples[i].streak);
+      const x = center.x + Math.cos(a) * r;
+      const y = center.y + Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    // close the loop visually toward the first sample
+    if (samples.length > 2) {
+      const a0 = angleAtT(samples[0].t);
+      const r0 = radiusAt(samples[0].streak);
+      ctx.lineTo(center.x + Math.cos(a0) * r0, center.y + Math.sin(a0) * r0);
+    }
+    ctx.strokeStyle = palette.dodge;
+    ctx.globalAlpha = 0.9;
+    ctx.lineWidth = 2.4;
+    ctx.lineJoin = "round";
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Hits: red radial spikes from baseline — aligned with HP drops via shared t.
+    for (let i = 0; i < samples.length; i++) {
+      if (!samples[i].hit) continue;
+      const a = angleAtT(samples[i].t);
+      const x0 = center.x + Math.cos(a) * (baseR - 4);
+      const y0 = center.y + Math.sin(a) * (baseR - 4);
+      const x1 = center.x + Math.cos(a) * (maxR - 8);
+      const y1 = center.y + Math.sin(a) * (maxR - 8);
+      ctx.strokeStyle = palette.hit;
+      ctx.globalAlpha = 0.85;
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      // tip mark
+      ctx.fillStyle = palette.hit;
+      ctx.beginPath();
+      ctx.arc(
+        center.x + Math.cos(a) * maxR,
+        center.y + Math.sin(a) * maxR,
+        4.2,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    }
+
+    // --- Lane route glow (left/right path approximated by judgment lanes) ---
+    // Empty presses are not recorded, but the lane at each judgment still
+    // shows the route the player was on while interacting.
+    const routePts = [];
+    for (let i = 0; i < samples.length; i++) {
+      if (samples[i].lane == null) continue;
+      const a = angleAtT(samples[i].t);
+      // Map lane 0..(laneCount-1) into a band slightly inside baseR..maxR
+      const laneT = samples[i].lane / Math.max(1, laneCount - 1);
+      const r = baseR + 12 + laneT * (maxR - baseR - 28);
+      routePts.push({
+        x: center.x + Math.cos(a) * r,
+        y: center.y + Math.sin(a) * r,
+      });
+    }
+    if (routePts.length >= 2) {
+      // Soft outer glow
+      ctx.beginPath();
+      ctx.moveTo(routePts[0].x, routePts[0].y);
+      for (let i = 1; i < routePts.length; i++) {
+        ctx.lineTo(routePts[i].x, routePts[i].y);
+      }
+      ctx.strokeStyle = "#66b8ff";
+      ctx.globalAlpha = 0.18;
+      ctx.lineWidth = 9;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.stroke();
+
+      // Brighter core
+      ctx.beginPath();
+      ctx.moveTo(routePts[0].x, routePts[0].y);
+      for (let i = 1; i < routePts.length; i++) {
+        ctx.lineTo(routePts[i].x, routePts[i].y);
+      }
+      ctx.strokeStyle = "#9ad4ff";
+      ctx.globalAlpha = 0.55;
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      // Small dots at sample points for readability
+      ctx.fillStyle = "#b8e0ff";
+      ctx.globalAlpha = 0.45;
+      for (const p of routePts) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+  } else {
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, (baseR + maxR) / 2, 0, Math.PI * 2);
+    ctx.strokeStyle = palette.dodge;
+    ctx.globalAlpha = 0.2;
+    ctx.lineWidth = 10;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // Center rank / skull.
+  ctx.beginPath();
+  ctx.arc(center.x, center.y, 155, 0, Math.PI * 2);
+  ctx.fillStyle = "#111820";
+  ctx.fill();
+  ctx.strokeStyle = "#ffffff30";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.textAlign = "center";
+  ctx.font = "700 22px system-ui, sans-serif";
+  ctx.fillStyle = palette.mute;
+  ctx.fillText("RANK", center.x, center.y - 77);
+  if (dead) {
+    ctx.font = "900 120px system-ui, sans-serif";
+    ctx.fillStyle = accent;
+    ctx.fillText("💀", center.x, center.y + 48);
+  } else {
+    ctx.font = "900 160px system-ui, sans-serif";
+    ctx.fillStyle = accent;
+    ctx.fillText(grade, center.x, center.y + 58);
+  }
+  ctx.textAlign = "left";
+}
+
+function scoreCardFileName() {
+  return `zip-zap-notes-${new Date().toISOString().slice(0, 10)}.png`;
+}
+
+function downloadScoreCard(blob) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = scoreCardFileName();
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+document.getElementById("btnSaveScore")?.addEventListener("click", () => {
+  const canvas = document.getElementById("scoreCardCanvas");
+  canvas?.toBlob((blob) => blob && downloadScoreCard(blob), "image/png");
+});
+
+document.getElementById("btnShareScore")?.addEventListener("click", () => {
+  const dead = Boolean(lastResult.dead);
+  const text = dead
+    ? `Zip Zap Notes: ${lastResult.score} points · GAME OVER · ${config.difficulty}`
+    : `Zip Zap Notes: ${lastResult.score} points · CLEAR · ${config.difficulty}`;
+  const url = `https://twitter.com/intent/tweet?text=${
+    encodeURIComponent(text)
+  }&url=${encodeURIComponent("https://marmooo.github.io/zip-zap-notes/")}`;
+  globalThis.open(url, "_blank", "noopener,noreferrer");
+});
 
 // ---------------------------------------------------------------------------
 // Key hints
@@ -2672,6 +3151,9 @@ midy.addEventListener("stopped", () => {
 midy.addEventListener("seeked", () => {
   if (mode !== "midi" || gamePhase !== "playing") return;
   worker.postMessage({ type: "start" });
+  playHistory = [];
+  playStartPerf = performance.now();
+  hpHistory = [{ hp: currentHp, maxHp: lastResult.maxHp || 100, t: 0 }];
   lastResult = emptyResult(laneNotes.length);
   worker.postMessage({
     type: "tick",
@@ -2682,6 +3164,9 @@ midy.addEventListener("seeked", () => {
 midy.addEventListener("looped", () => {
   if (mode !== "midi") return;
   worker.postMessage({ type: "start" });
+  playHistory = [];
+  playStartPerf = performance.now();
+  hpHistory = [{ hp: 100, maxHp: 100, t: 0 }];
   lastResult = emptyResult(laneNotes.length);
 });
 
@@ -2854,6 +3339,9 @@ function beginAudioRound() {
       clearTimeout(endingFadeTimeoutId);
       endingFadeTimeoutId = null;
     }
+    playHistory = [];
+    playStartPerf = performance.now();
+    hpHistory = [{ hp: 100, maxHp: 100, t: 0 }];
     lastResult = emptyResult(laneNotes.length);
     worker?.postMessage({ type: "start" });
     isPaused = false;
