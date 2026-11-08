@@ -1671,13 +1671,14 @@ document.getElementById("btnSaveScore")?.addEventListener("click", () => {
 });
 
 document.getElementById("btnShareScore")?.addEventListener("click", () => {
+  const shareUrl = getShareUrl();
   const dead = Boolean(lastResult.dead);
   const text = dead
     ? `Zip Zap Notes: ${lastResult.score} points · GAME OVER · ${config.difficulty}`
     : `Zip Zap Notes: ${lastResult.score} points · CLEAR · ${config.difficulty}`;
   const url = `https://twitter.com/intent/tweet?text=${
     encodeURIComponent(text)
-  }&url=${encodeURIComponent("https://marmooo.github.io/zip-zap-notes/")}`;
+  }&url=${encodeURIComponent(shareUrl)}`;
   globalThis.open(url, "_blank", "noopener,noreferrer");
 });
 
@@ -2724,6 +2725,21 @@ selectPanel.addEventListener("drop", (e) => {
 // ---------------------------------------------------------------------------
 
 /** MIDI ライブラリ行から短縮クエリ (?c=&i=) を URL に反映する（履歴は置き換え） */
+
+/** 共有用 URL。ライブラリ由来なら現在の ?c=&i= を使い、それ以外はアプリ本体 */
+function getShareUrl() {
+  const params = new URLSearchParams(location.search);
+  if (params.has("c") && params.has("i")) {
+    const share = new URLSearchParams();
+    share.set("c", params.get("c"));
+    share.set("i", params.get("i"));
+    if (params.get("db") === "c") share.set("db", "c");
+    // if (params.get("title")) share.set("title", params.get("title"));
+    return `${location.origin}${location.pathname}?${share.toString()}`;
+  }
+  return `${location.origin}${location.pathname}`;
+}
+
 function updateUrlFromLibraryRow(row) {
   if (!row?.file) return;
   const c = row.collectionId || String(row.file).split("/")[0] || "";
