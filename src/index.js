@@ -2672,6 +2672,7 @@ async function loadFile(file) {
   if (kind === "midi") {
     const buf = await file.arrayBuffer();
     // ローカル MIDI にはライブラリ由来の著作権情報がない（ファイル名のみ表示しない）
+    clearLibraryUrl();
     await loadMIDIBytes(new Uint8Array(buf), null);
     return;
   }
@@ -2721,6 +2722,30 @@ selectPanel.addEventListener("drop", (e) => {
 });
 
 // ---------------------------------------------------------------------------
+
+/** MIDI ライブラリ行から短縮クエリ (?c=&i=) を URL に反映する（履歴は置き換え） */
+function updateUrlFromLibraryRow(row) {
+  if (!row?.file) return;
+  const c = row.collectionId || String(row.file).split("/")[0] || "";
+  const i = Number.isInteger(row.index)
+    ? row.index
+    : Number.parseInt(String(row.index ?? ""), 10);
+  if (!c || !Number.isInteger(i) || i < 0) return;
+  const params = new URLSearchParams();
+  params.set("c", c);
+  params.set("i", String(i));
+  if (midiLibrary.midiDB === MIDI_DB_CLASSICAL) params.set("db", "c");
+  if (row.title) params.set("title", row.title);
+  const url = `${location.pathname}?${params.toString()}${location.hash || ""}`;
+  history.replaceState(null, "", url);
+}
+
+/** ローカルファイル等では共有可能なライブラリ URL を消す */
+function clearLibraryUrl() {
+  if (!location.search) return;
+  history.replaceState(null, "", `${location.pathname}${location.hash || ""}`);
+}
+
 // MIDI library（Bootstrap modal 内に MidiLibrary で一覧表示）
 // ---------------------------------------------------------------------------
 
@@ -2736,6 +2761,7 @@ const midiLibrary = new MidiLibrary({
     const buf = await (await fetch(`${midiLibrary.midiDB}/${row.file}`))
       .arrayBuffer();
     await loadMIDIBytes(new Uint8Array(buf), trackMetaFromLibraryRow(row));
+    updateUrlFromLibraryRow(row);
     libraryModal.hide();
   },
 });
@@ -2990,6 +3016,7 @@ async function playRandomLongMidi() {
     const buf = await (await fetch(`${midiLibrary.midiDB}/${row.file}`))
       .arrayBuffer();
     await loadMIDIBytes(new Uint8Array(buf), trackMetaFromLibraryRow(row));
+    updateUrlFromLibraryRow(row);
   } catch (err) {
     console.error("Random MIDI load failed:", err);
     alert(t("randomMidiLoadFailedPrefix") + (err?.message || err));
@@ -3312,6 +3339,7 @@ function initBeatWorker() {
 }
 
 async function loadAudioFile(file) {
+  clearLibraryUrl();
   if (!file) return;
   switchMode("audio");
   const buf = await file.arrayBuffer();
