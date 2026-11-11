@@ -1949,7 +1949,7 @@ document.getElementById("btnShareScore")?.addEventListener("click", () => {
   const status = dead ? "GAME OVER" : "CLEAR";
   const track = formatTrackShareLabel(48);
   const text = track
-    ? `Zip Zap Notes: ${lastResult.score} points · ${status} · ${config.difficulty} · ${track}`
+    ? `Zip Zap Notes: ${lastResult.score} points · ${status} · ${track} · ${config.difficulty}`
     : `Zip Zap Notes: ${lastResult.score} points · ${status} · ${config.difficulty}`;
   const textForX = text.replaceAll("@", "@\u200B");
   const url = `https://twitter.com/intent/tweet?text=${
@@ -2348,6 +2348,7 @@ function goToStartScreen() {
   if (gamePhase === "playing") stopRaf();
   stopAllPlayback();
   clearTrackMeta();
+  clearLibraryUrl();
   showScreen("start");
 }
 document.getElementById("btnChangeFileReady").addEventListener(
