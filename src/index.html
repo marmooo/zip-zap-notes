@@ -985,6 +985,19 @@
                 </div>
 
                 <div class="mb-3">
+                  <label class="form-label" for="noteType">Note type</label>
+                  <select class="form-select form-select-sm" id="noteType">
+                    <option value="tile">Tiles</option>
+                    <option value="food">Food</option>
+                    <option value="animal" selected>Animals</option>
+                    <option value="object">Objects</option>
+                  </select>
+                  <div class="small text-muted mt-1">
+                    Long notes are filled with the same emoji (not split).
+                  </div>
+                </div>
+
+                <div class="mb-3">
                   <label class="form-label">Background</label>
                   <select class="form-select form-select-sm mb-2" id="backgroundPreset">
                     <option value="">None</option>

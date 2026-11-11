@@ -13,8 +13,11 @@
 import { Midy } from "https://cdn.jsdelivr.net/gh/marmooo/midy@0.7.3/dist/midy.wasm.js";
 import { Modal } from "https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/+esm";
 import {
+  ANIMAL_EMOJIS,
   DIFFICULTIES,
   extractNotesFromMidy,
+  FOOD_EMOJIS,
+  OBJECT_EMOJIS,
   thinNotes,
 } from "./rhythm-game.js";
 import { MidiLibrary } from "https://marmooo.github.io/free-midi/midi-library.js";
@@ -68,6 +71,21 @@ const isIOS = /iP(ad|hone|od)/.test(navigator.userAgent) ||
 // ブロックの横幅が変わるので、レーンを増やしても難易度（塞がる割合）は変わらない。
 const MIN_LANES = 4;
 const MAX_LANES = 12;
+
+/** noteType → 絵文字配列。tile のときは空（描画で使わない）。 */
+function getEmojisForType(noteType) {
+  switch (noteType) {
+    case "animal":
+      return ANIMAL_EMOJIS;
+    case "object":
+      return OBJECT_EMOJIS;
+    case "food":
+      return FOOD_EMOJIS;
+    default:
+      return [];
+  }
+}
+
 const DEFAULT_CONFIG = {
   laneCount: 6,
   scrollSpeed: 700,
@@ -99,6 +117,7 @@ const DEFAULT_CONFIG = {
   // Midy の sample キャッシュ粒度。none → ads → adsr → note → segment → chunk。
   // 高いほど複雑な MIDI で効率が良いが、iOS の OfflineAudioContext 不具合で落ちやすくなる。
   cacheMode: isIOS ? "none" : "chunk",
+  noteType: "animal", // "tile" | "food" | "animal" | "object"
 };
 
 // midy.cacheMode の段階（スライダー 0–5 と対応）
@@ -121,8 +140,19 @@ function loadConfig() {
   try {
     const loaded = {
       ...DEFAULT_CONFIG,
-      ...JSON.parse(localStorage.getItem("FlipFlapDodgeConfig") || "{}"),
+      ...JSON.parse(
+        localStorage.getItem("ZipZapNotesConfig") ||
+          localStorage.getItem("FlipFlapDodgeConfig") ||
+          "{}",
+      ),
     };
+    if (loaded.noteType == null && typeof loaded.emojiMode === "boolean") {
+      loaded.noteType = loaded.emojiMode ? "food" : "tile";
+    }
+    if (!["tile", "food", "animal", "object"].includes(loaded.noteType)) {
+      loaded.noteType = "animal";
+    }
+    delete loaded.emojiMode;
     return loaded;
   } catch (err) {
     console.warn("Failed to load saved config, falling back to defaults:", err);
@@ -130,7 +160,7 @@ function loadConfig() {
   }
 }
 function saveConfig(c) {
-  localStorage.setItem("FlipFlapDodgeConfig", JSON.stringify(c));
+  localStorage.setItem("ZipZapNotesConfig", JSON.stringify(c));
 }
 // "rgb(r, g, b)" 形式（getComputedStyle が返す形式）を <input type=color> 用の
 // "#rrggbb" に変換する。パースできない場合は null を返す。
@@ -465,6 +495,8 @@ function buildWorkerOptions() {
     initialHp: currentHp,
     // canvas 座標系（dpr込み）での navbar 回避量。HUD 描画開始 y に加算する。
     topInset: computeTopInset(),
+    noteType: config.noteType ?? "animal",
+    emojis: getEmojisForType(config.noteType ?? "animal"),
   };
 }
 
@@ -1036,6 +1068,8 @@ function applyConfigToGame(cfg) {
           laneOpacity: config.laneOpacity ?? 0.35,
           scrollSpeed: config.scrollSpeed,
           perspective: (config.perspectiveEnabled ?? true) ? PERSPECTIVE : 0,
+          noteType: config.noteType ?? "animal",
+          emojis: getEmojisForType(config.noteType ?? "animal"),
         },
       });
     }
@@ -1058,6 +1092,8 @@ function applyConfigToGame(cfg) {
           laneOpacity: config.laneOpacity ?? 0.35,
           scrollSpeed: config.scrollSpeed,
           perspective: (config.perspectiveEnabled ?? true) ? PERSPECTIVE : 0,
+          noteType: config.noteType ?? "animal",
+          emojis: getEmojisForType(config.noteType ?? "animal"),
         },
       });
     }
@@ -1870,6 +1906,7 @@ function readSettingsUI() {
         : config.laneLineColor ?? "",
     perspectiveEnabled:
       document.getElementById("perspectiveEnabled")?.checked ?? true,
+    noteType: document.getElementById("noteType")?.value || "animal",
     laneOpacity: parseFloat(
       document.getElementById("laneOpacity")?.value ?? "0.35",
     ),
@@ -1921,6 +1958,8 @@ function openSettings() {
   sv("difficulty", config.difficulty);
   const persEl = document.getElementById("perspectiveEnabled");
   if (persEl) persEl.checked = config.perspectiveEnabled ?? true;
+  const noteTypeEl = document.getElementById("noteType");
+  if (noteTypeEl) noteTypeEl.value = config.noteType ?? "animal";
   const joEl = document.getElementById("judgeOffset");
   if (joEl) {
     joEl.value = config.judgeOffset ?? 0;

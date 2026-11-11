@@ -875,6 +875,532 @@ const DEATH_ANIM_SEC = 1.2;
 // RhythmGame
 // ---------------------------------------------------------------------------
 
+export const FOOD_EMOJIS = [
+  // 果物
+  "🍇",
+  "🍈",
+  "🍉",
+  "🍊",
+  "🍋",
+  "🍌",
+  "🍍",
+  "🥭",
+  "🍎",
+  "🍏",
+  "🍐",
+  "🍑",
+  "🍒",
+  "🍓",
+  "🫐",
+  "🥝",
+  "🍅",
+  "🫒",
+  "🥥",
+  // 野菜
+  "🥑",
+  "🍆",
+  "🥔",
+  "🥕",
+  "🌽",
+  "🌶️",
+  "🫑",
+  "🥒",
+  "🥬",
+  "🥦",
+  "🧄",
+  "🧅",
+  "🍄",
+  "🥜",
+  "🫘",
+  "🌰",
+  // パン・穀物・チーズ・卵・肉素材
+  "🍞",
+  "🥐",
+  "🥖",
+  "🫓",
+  "🥨",
+  "🥯",
+  "🥞",
+  "🧇",
+  "🧀",
+  "🥚",
+  "🍳",
+  "🧈",
+  "🥓",
+  "🥩",
+  // 料理・ファストフード・和食・中華など
+  "🍗",
+  "🍖",
+  "🦴",
+  "🌭",
+  "🍔",
+  "🍟",
+  "🍕",
+  "🥪",
+  "🥙",
+  "🧆",
+  "🌮",
+  "🌯",
+  "🫔",
+  "🥗",
+  "🥘",
+  "🫕",
+  "🥫",
+  "🍝",
+  "🍜",
+  "🍲",
+  "🍛",
+  "🍣",
+  "🍱",
+  "🥟",
+  "🦪",
+  "🍤",
+  "🍙",
+  "🍚",
+  "🍘",
+  "🍥",
+  "🥠",
+  "🥮",
+  // デザート・スイーツ
+  "🍦",
+  "🍧",
+  "🍨",
+  "🍩",
+  "🍪",
+  "🎂",
+  "🧁",
+  "🥧",
+  "🍰",
+  "🍫",
+  "🍬",
+  "🍭",
+  "🍮",
+  "🍯",
+  "🍿",
+  // 飲み物
+  "🍼",
+  "🥛",
+  "☕",
+  "🫖",
+  "🍵",
+  "🍶",
+  "🍾",
+  "🍷",
+  "🍸",
+  "🍹",
+  "🍺",
+  "🍻",
+  "🥂",
+  "🥃",
+  "🫗",
+  "🧃",
+  "🧉",
+  "🧊",
+  // 食器・調味料
+  "🥢",
+  "🍽️",
+  "🍴",
+  "🥄",
+  "🫙",
+  "🧂",
+];
+
+export const ANIMAL_EMOJIS = [
+  // 哺乳類・顔
+  "🐶",
+  "🐱",
+  "🐭",
+  "🐹",
+  "🐰",
+  "🦊",
+  "🐻",
+  "🐼",
+  "🐻‍❄️",
+  "🐨",
+  "🐯",
+  "🦁",
+  "🐮",
+  "🐷",
+  "🐸",
+  "🐵",
+  "🙈",
+  "🙉",
+  "🙊",
+  "🐒",
+  "🐺",
+  "🐗",
+  "🐴",
+  "🦄",
+  "🐝",
+  "🪱",
+  "🐛",
+  "🦋",
+  "🐌",
+  "🐞",
+  "🐜",
+  "🪰",
+  "🪲",
+  "🪳",
+  "🦟",
+  "🦗",
+  "🕷️",
+  "🦂",
+  "🐢",
+  "🐍",
+  "🦎",
+  "🦖",
+  "🦕",
+  "🐙",
+  "🦑",
+  "🦐",
+  "🦞",
+  "🦀",
+  "🐡",
+  "🐠",
+  "🐟",
+  "🐬",
+  "🐳",
+  "🐋",
+  "🦈",
+  "🦭",
+  "🐊",
+  "🐅",
+  "🐆",
+  "🦓",
+  "🦍",
+  "🦧",
+  "🐘",
+  "🦛",
+  "🦏",
+  "🐪",
+  "🐫",
+  "🦒",
+  "🦘",
+  "🦬",
+  "🐃",
+  "🐂",
+  "🐄",
+  "🐎",
+  "🐖",
+  "🐏",
+  "🐑",
+  "🦙",
+  "🐐",
+  "🦌",
+  "🐕",
+  "🐩",
+  "🦮",
+  "🐕‍🦺",
+  "🐈",
+  "🐈‍⬛",
+  "🐓",
+  "🦃",
+  "🦤",
+  "🦚",
+  "🦜",
+  "🦢",
+  "🦩",
+  "🕊️",
+  "🐇",
+  "🦝",
+  "🦨",
+  "🦡",
+  "🦫",
+  "🦦",
+  "🦥",
+  "🐁",
+  "🐀",
+  "🐿️",
+  "🦔",
+  "🐔",
+  "🐧",
+  "🐦",
+  "🐤",
+  "🐣",
+  "🐥",
+  "🦆",
+  "🦅",
+  "🦉",
+  "🦇",
+];
+
+export const OBJECT_EMOJIS = [
+  // 道具・文房具・日用品
+  "⌚",
+  "📱",
+  "💻",
+  "⌨️",
+  "🖥️",
+  "🖨️",
+  "🖱️",
+  "🕹️",
+  "💾",
+  "💿",
+  "📀",
+  "📷",
+  "📸",
+  "📹",
+  "🎥",
+  "📞",
+  "☎️",
+  "📟",
+  "📠",
+  "📺",
+  "📻",
+  "🎙️",
+  "🧭",
+  "⏱️",
+  "⏲️",
+  "⏰",
+  "🕰️",
+  "⌛",
+  "⏳",
+  "📡",
+  "🔋",
+  "🔌",
+  "💡",
+  "🔦",
+  "🕯️",
+  "🧯",
+  "💸",
+  "💵",
+  "💴",
+  "💶",
+  "💷",
+  "🪙",
+  "💰",
+  "💳",
+  "💎",
+  "⚖️",
+  "🧰",
+  "🪛",
+  "🔧",
+  "🔨",
+  "⚒️",
+  "🛠️",
+  "⛏️",
+  "🪚",
+  "🔩",
+  "⚙️",
+  "🧱",
+  "🧲",
+  "🔫",
+  "💣",
+  "🧨",
+  "🪓",
+  "🔪",
+  "🗡️",
+  "⚔️",
+  "🛡️",
+  "🔮",
+  "💈",
+  "⚗️",
+  "🔭",
+  "🔬",
+  "🩹",
+  "🩺",
+  "💊",
+  "💉",
+  "🩸",
+  "🧬",
+  "🦠",
+  "🧫",
+  "🧪",
+  "🌡️",
+  "🧹",
+  "🪠",
+  "🧺",
+  "🧻",
+  "🚽",
+  "🚰",
+  "🚿",
+  "🛁",
+  "🛀",
+  "🧼",
+  "🪥",
+  "🪒",
+  "🧽",
+  "🪣",
+  "🧴",
+  "🛎️",
+  "🔑",
+  "🗝️",
+  "🚪",
+  "🪑",
+  "🛋️",
+  "🛏️",
+  "🛌",
+  "🧸",
+  "🪆",
+  "🖼️",
+  "🪞",
+  "🪟",
+  "🛍️",
+  "🛒",
+  "🎁",
+  "🎈",
+  "🎏",
+  "🎀",
+  "🪄",
+  "🪅",
+  "🎊",
+  "🎉",
+  "🎎",
+  "🏮",
+  "🎐",
+  "🧧",
+  "✉️",
+  "📩",
+  "📨",
+  "📧",
+  "💌",
+  "📥",
+  "📤",
+  "📦",
+  "🏷️",
+  "🪧",
+  "📪",
+  "📫",
+  "📬",
+  "📭",
+  "📮",
+  "📯",
+  "📜",
+  "📃",
+  "📄",
+  "📑",
+  "🧾",
+  "📊",
+  "📈",
+  "📉",
+  "🗒️",
+  "🗓️",
+  "📆",
+  "📅",
+  "🗑️",
+  "📇",
+  "🗃️",
+  "🗳️",
+  "🗄️",
+  "📋",
+  "📁",
+  "📂",
+  "🗂️",
+  "🗞️",
+  "📰",
+  "📓",
+  "📔",
+  "📒",
+  "📕",
+  "📗",
+  "📘",
+  "📙",
+  "📚",
+  "📖",
+  "🔖",
+  "🧷",
+  "🔗",
+  "📎",
+  "🖇️",
+  "📐",
+  "📏",
+  "🧮",
+  "📌",
+  "📍",
+  "✂️",
+  "🖊️",
+  "🖋️",
+  "✒️",
+  "🖌️",
+  "🖍️",
+  "📝",
+  "✏️",
+  "🔍",
+  "🔎",
+  "🔏",
+  "🔐",
+  "🔒",
+  "🔓",
+];
+
+/**
+ * ノートごとに絵文字インデックスをランダム割り当て（ロングも1つで共有し、敷き詰めで同じ絵文字を使う）
+ */
+function assignEmojiIndices(
+  notes,
+  emojiCount = Math.max(
+    FOOD_EMOJIS.length,
+    ANIMAL_EMOJIS.length,
+    OBJECT_EMOJIS.length,
+  ),
+) {
+  if (!notes || notes.length === 0 || emojiCount <= 0) return;
+  const shuffle = (arr) => {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0;
+      const tmp = arr[i];
+      arr[i] = arr[j];
+      arr[j] = tmp;
+    }
+    return arr;
+  };
+  let pool = shuffle(Array.from({ length: emojiCount }, (_, i) => i));
+  let poolPos = 0;
+  for (const n of notes) {
+    if (poolPos >= pool.length) {
+      pool = shuffle(Array.from({ length: emojiCount }, (_, i) => i));
+      poolPos = 0;
+    }
+    n.emojiIndex = pool[poolPos++];
+  }
+}
+
+const _emojiCache = new Map();
+const EMOJI_SIZE_STEP = 4;
+const EMOJI_CACHE_MAX = 96;
+
+function quantizeEmojiSize(size) {
+  const s = Number(size) || 0;
+  // ノート高さに合わせて小さくするケースがあるため下限は 8
+  return Math.max(8, Math.round(s / EMOJI_SIZE_STEP) * EMOJI_SIZE_STEP);
+}
+
+function getEmojiCanvas(emoji, size) {
+  const q = quantizeEmojiSize(size);
+  const key = `${emoji}@${q}`;
+  let oc = _emojiCache.get(key);
+  if (oc) {
+    _emojiCache.delete(key);
+    _emojiCache.set(key, oc);
+    return oc;
+  }
+  const canOff = typeof OffscreenCanvas !== "undefined"
+    ? new OffscreenCanvas(q, q)
+    : Object.assign(document.createElement("canvas"), { width: q, height: q });
+  if (!(canOff instanceof OffscreenCanvas)) {
+    canOff.width = q;
+    canOff.height = q;
+  }
+  const ctx = canOff.getContext("2d");
+  ctx.clearRect(0, 0, q, q);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `${
+    Math.floor(q * 0.85)
+  }px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla",serif`;
+  ctx.fillText(emoji, q / 2, q / 2 + q * 0.02);
+  if (_emojiCache.size >= EMOJI_CACHE_MAX) {
+    const oldest = _emojiCache.keys().next().value;
+    _emojiCache.delete(oldest);
+  }
+  _emojiCache.set(key, canOff);
+  return canOff;
+}
+
+function clearEmojiCache() {
+  _emojiCache.clear();
+}
+
 export class RhythmGame {
   onJudgment = null; // (judgment, combo, score)
   onEnded = null; // 譜面を最後まで生き延びた
@@ -974,6 +1500,17 @@ export class RhythmGame {
       aimMoveInterval: options.aimMoveInterval ?? null,
       aimReaction: options.aimReaction ?? AIM_REACTION,
       aimSlack: options.aimSlack ?? AIM_SLACK,
+      noteType: options.noteType ?? (options.emojiMode ? "food" : "animal"),
+      emojis: options.emojis ?? (
+        (() => {
+          const nt = options.noteType ??
+            (options.emojiMode ? "food" : "animal");
+          if (nt === "animal") return ANIMAL_EMOJIS;
+          if (nt === "object") return OBJECT_EMOJIS;
+          if (nt === "food") return FOOD_EMOJIS;
+          return ANIMAL_EMOJIS;
+        })()
+      ),
     };
     this.#maxHp = this.#opts.maxHp;
     this.#hp = options.initialHp !== undefined
@@ -988,6 +1525,10 @@ export class RhythmGame {
 
   setNotesRaw(laneNotes) {
     this.#notes = laneNotes;
+    assignEmojiIndices(
+      this.#notes,
+      (this.#opts.emojis || []).length || undefined,
+    );
     this.#initNotes();
     this.#opts.totalNotes = laneNotes.length;
     return laneNotes.length;
@@ -1003,6 +1544,10 @@ export class RhythmGame {
       this.#opts.laneCount,
       this.#opts.difficulty,
       this.#opts.thinExtra,
+    );
+    assignEmojiIndices(
+      this.#notes,
+      (this.#opts.emojis || []).length || undefined,
     );
     this.#initNotes();
     this.#opts.totalNotes = this.#notes.length;
@@ -1117,6 +1662,8 @@ export class RhythmGame {
       "laneLineColor",
       "topInset",
       "buttonZoneHeight",
+      "noteType",
+      "emojis",
     ];
     for (const key of simple) {
       if (patch[key] !== undefined) {
@@ -1857,27 +2404,120 @@ export class RhythmGame {
         color = covered ? DANGER_COLOR : laneColor;
       }
 
-      ctx.shadowColor = color;
-      if (note.holdActive) {
-        // 判定ライン通過中はゆっくり脈動させる
-        alpha *= 0.8 + 0.2 * Math.sin(t * 14);
-      }
-      trap(note.lane, note.width, drawTop, drawBot, color, alpha);
+      // 判定ライン通過中の脈動（点滅）はしない
 
-      // 進行方向の先頭（下端）に明るいハイライト
-      ctx.shadowBlur = 0;
-      const shineH = Math.min(10 * d, (drawBot - drawTop) * 0.3);
-      if (yBot <= H && shineH > 1) {
-        trap(
-          note.lane,
-          note.width,
-          drawBot - shineH,
-          drawBot,
-          "rgba(255,255,255,0.35)",
-          alpha,
-        );
+      // 絵文字モード: ロングノートは分割せず、同じ絵文字を縦に敷き詰める。
+      // 複数レーン幅のノートは「レーンごと」に絵文字列を降らせる（中央に1列ではなく）。
+      // 間隔は「画面 px 固定」ではなく scrollSpeed 由来の時間軸で取る
+      // （遠近で上側の見た目スケールが変わっても、ノート本体との距離がズレない）。
+      if (
+        o.noteType && o.noteType !== "tile" && o.emojis && o.emojis.length > 0
+      ) {
+        const emojis = o.emojis;
+        const idx = Number.isFinite(note.emojiIndex)
+          ? ((note.emojiIndex % emojis.length) + emojis.length) % emojis.length
+          : ((note.noteNumber % emojis.length) + emojis.length) % emojis.length;
+        const emoji = emojis[idx];
+
+        // 通常ノーツ（1個分）の大きさに近い間隔で並べる。
+        // 判定ライン付近のサイズを基準に時間間隔へ変換（詰めすぎず、途切れない密度）
+        // pick-pack-notes と同様 0.90 を基準にする（以前の 0.82 + 斜辺補正は外側レーンが小さくなりすぎた）
+        const scHit = this.#sc(hitY, btnBot, p);
+        const sizeAtHit = Math.max(12, laneW * scHit * 0.90);
+        // 0.95 倍程度の間隔 → 少し重なり気味〜密着くらい。詰めすぎない
+        const dt = Math.max(0.025, (sizeAtHit * 0.95) / Math.max(1, speed));
+
+        // 絵文字は shadowBlur をかけない（ロングで複数回 drawImage すると重いため）
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+
+        // pick-pack-notes と同様、台形クリップはしない。
+        // クリップすると遠近の斜め端＋正方形絵文字で外側レーンが途切れる。
+        const tStart = note.startTime;
+        const tEnd = Math.max(note.endTime, note.startTime);
+        const duration = tEnd - tStart;
+        const noteWidth = Math.max(1, note.width | 0);
+        const baseLane = note.lane;
+
+        const drawAtNoteTime = (nt) => {
+          const y = hitY - (nt - t) * speed;
+          // 画面外は描かない。サイズ変動を見込んで大きめにマージンを取る
+          if (y < drawTop - sizeAtHit * 1.5 || y > drawBot + sizeAtHit * 1.5) {
+            return;
+          }
+          if (y < -sizeAtHit * 1.5 || y > H + sizeAtHit * 1.5) return;
+
+          // ノート本体内に収まる最大高さ（上下対称に半分ずつ）
+          const roomAbove = y - yTop;
+          const roomBelow = yBot - y;
+          const maxH = Math.max(0, 2 * Math.min(roomAbove, roomBelow));
+
+          // レーン幅は遠近 sc だけで決まり、どのレーンも同じ画面上の幅になる
+          // （#perspX の差分 = laneW * sc）。理想サイズは全レーン共通。
+          // pick-pack-notes と同様 0.90。クリップしないので外側も途切れない。
+          const scY = this.#sc(y, btnBot, p);
+          const lanePx = laneW * scY;
+          const szLane = lanePx * 0.90;
+          const sz = Math.max(8, Math.min(szLane, maxH));
+          const q = quantizeEmojiSize(sz);
+
+          // 各レーン中央に同じサイズで描画（外側レーンだけ小さくしない）
+          for (let li = 0; li < noteWidth; li++) {
+            const lane = baseLane + li;
+            const xL = this.#perspX(lane, laneW, W, y, btnBot, p);
+            const xR = this.#perspX(lane + 1, laneW, W, y, btnBot, p);
+            const ex = (xL + xR) / 2;
+            const oc = getEmojiCanvas(emoji, q);
+            if (oc) ctx.drawImage(oc, ex - q / 2, y - q / 2, q, q);
+          }
+        };
+
+        // 先頭〜末尾を均等に埋めて途切れさせない（pick-pack-notes と同じ方針）。
+        // count は判定ライン基準の dt で安定決定（落下中に個数が変わらない）。
+        // 各絵文字のサイズは drawAtNoteTime 内で現在Yのパースペクティブを反映。
+        const MAX_ALONG = 96;
+        const halfSizeTime = (sizeAtHit * 0.50) / Math.max(1, speed);
+        // 短いノート（理想間隔の 1.35 倍以下）は中央に 1 つ
+        if (duration <= dt * 1.35) {
+          drawAtNoteTime((tStart + tEnd) / 2);
+        } else {
+          // start-end をできるだけ埋める。余白は半サイズ程度に抑え、
+          // 極端に短いノートで潰れないよう duration 比でも上限を設ける。
+          const margin = Math.min(halfSizeTime, duration * 0.22);
+          const innerStart = tStart + margin;
+          const innerEnd = tEnd - margin;
+          const innerDur = Math.max(0, innerEnd - innerStart);
+          // dt 基準で個数を決め、最低2・上限 MAX_ALONG
+          let count = Math.round(innerDur / dt) + 1;
+          if (count > MAX_ALONG) count = MAX_ALONG;
+          if (count < 2) count = 2;
+          const step = count > 1 ? innerDur / (count - 1) : 0;
+          for (let i = 0; i < count; i++) {
+            drawAtNoteTime(innerStart + step * i);
+          }
+        }
+        // 絵文字モードでは矩形（軌跡バー）は描画しない
+        // glow 設定だけ戻す
+        ctx.shadowBlur = glow ? 14 * d : 0;
+      } else {
+        ctx.shadowColor = color;
+        trap(note.lane, note.width, drawTop, drawBot, color, alpha);
+
+        // 進行方向の先頭（下端）に明るいハイライト
+        ctx.shadowBlur = 0;
+        const shineH = Math.min(10 * d, (drawBot - drawTop) * 0.3);
+        if (yBot <= H && shineH > 1) {
+          trap(
+            note.lane,
+            note.width,
+            drawBot - shineH,
+            drawBot,
+            "rgba(255,255,255,0.35)",
+            alpha,
+          );
+        }
+        ctx.shadowBlur = glow ? 14 * d : 0;
       }
-      ctx.shadowBlur = glow ? 14 * d : 0;
     }
 
     ctx.globalAlpha = prevAlpha;
