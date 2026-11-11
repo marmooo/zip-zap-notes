@@ -1937,8 +1937,9 @@ document.getElementById("btnShareScore")?.addEventListener("click", () => {
   const text = track
     ? `Zip Zap Notes: ${lastResult.score} points · ${status} · ${config.difficulty} · ${track}`
     : `Zip Zap Notes: ${lastResult.score} points · ${status} · ${config.difficulty}`;
+  const textForX = text.replaceAll("@", "@\u200B");
   const url = `https://twitter.com/intent/tweet?text=${
-    encodeURIComponent(text)
+    encodeURIComponent(textForX)
   }&url=${encodeURIComponent(shareUrl)}`;
   globalThis.open(url, "_blank", "noopener,noreferrer");
 });
