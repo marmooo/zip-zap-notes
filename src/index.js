@@ -118,6 +118,7 @@ const DEFAULT_CONFIG = {
   // 高いほど複雑な MIDI で効率が良いが、iOS の OfflineAudioContext 不具合で落ちやすくなる。
   cacheMode: isIOS ? "none" : "chunk",
   noteType: "animal", // "tile" | "food" | "animal" | "object"
+  characterId: 1, // 1〜10 = characters/N.webp / "custom" = ユーザー画像
 };
 
 // midy.cacheMode の段階（スライダー 0–5 と対応）
@@ -187,6 +188,14 @@ let config = loadConfig();
   if (!Array.isArray(config.laneColors)) config.laneColors = [];
   for (let l = config.laneColors.length; l < MAX_LANES; l++) {
     config.laneColors.push(DEFAULT_CONFIG.laneColors[l]);
+  }
+  if (config.characterId === "custom") {
+    /* keep */
+  } else {
+    const cid = Math.round(Number(config.characterId));
+    config.characterId = Number.isFinite(cid)
+      ? Math.min(10, Math.max(1, cid))
+      : 1;
   }
 }
 
@@ -571,6 +580,120 @@ function initWorker() {
     },
     [noteOff, particleOff, uiOff],
   );
+  // キャラ画像は Worker 初期化後に送る（失敗時は丸表示のまま）
+  void pushCharacterToWorker(config.characterId);
+}
+
+const CHARACTER_COUNT = 10;
+const CHARACTER_BASE = "/zip-zap-notes/characters";
+const CHAR_IDB_KEY = "character";
+/** @type {Blob|null} 設定プレビュー用の未確定カスタム画像 */
+let pendingCharacterBlob = null;
+/** @type {string|null} */
+let characterPreviewObjectUrl = null;
+
+function revokeCharacterPreviewUrl() {
+  if (characterPreviewObjectUrl) {
+    URL.revokeObjectURL(characterPreviewObjectUrl);
+    characterPreviewObjectUrl = null;
+  }
+}
+
+/** @returns {Promise<ImageBitmap|null>} */
+async function loadCharacterBitmap(id) {
+  try {
+    if (id === "custom") {
+      const blob = pendingCharacterBlob || (await loadCharacterFile());
+      if (!blob) return null;
+      return await createImageBitmap(blob);
+    }
+    const n = Math.min(
+      CHARACTER_COUNT,
+      Math.max(1, Math.round(Number(id)) || 1),
+    );
+    const url = `${CHARACTER_BASE}/${n}.webp`;
+    const res = await fetch(url, { cache: "force-cache" });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    if (!blob || blob.size === 0) return null;
+    return await createImageBitmap(blob);
+  } catch (err) {
+    console.warn("character image load failed:", id, err);
+    return null;
+  }
+}
+
+/** Worker にキャラ ImageBitmap を転送する。見つからなければ null で丸表示に戻す。 */
+async function pushCharacterToWorker(id) {
+  if (!worker) return;
+  const bitmap = await loadCharacterBitmap(id);
+  try {
+    if (bitmap) {
+      worker.postMessage({ type: "setCharacter", bitmap }, [bitmap]);
+    } else {
+      worker.postMessage({ type: "setCharacter", bitmap: null });
+    }
+  } catch (err) {
+    console.warn("setCharacter postMessage failed:", err);
+  }
+}
+
+async function saveCharacterFile(blob) {
+  try {
+    const db = await openBackgroundDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(BG_STORE, "readwrite");
+      tx.objectStore(BG_STORE).put(blob, CHAR_IDB_KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (err) {
+    console.warn("saveCharacterFile failed:", err);
+  }
+}
+
+async function loadCharacterFile() {
+  try {
+    const db = await openBackgroundDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(BG_STORE, "readonly");
+      const req = tx.objectStore(BG_STORE).get(CHAR_IDB_KEY);
+      req.onsuccess = () => resolve(req.result ?? null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    return null;
+  }
+}
+
+function updateCustomCharacterThumb(blobOrNull) {
+  const img = document.getElementById("charCustomThumb");
+  const radio = document.getElementById("charCustom");
+  const wrap = document.getElementById("charCustomWrap");
+  if (!img || !radio || !wrap) return;
+  revokeCharacterPreviewUrl();
+  if (blobOrNull) {
+    characterPreviewObjectUrl = URL.createObjectURL(blobOrNull);
+    img.src = characterPreviewObjectUrl;
+    img.hidden = false;
+    wrap.classList.remove("d-none");
+  } else {
+    img.removeAttribute("src");
+    img.hidden = true;
+    if (config.characterId !== "custom") {
+      wrap.classList.add("d-none");
+      radio.checked = false;
+    }
+  }
+}
+
+async function refreshCustomCharacterThumbFromStore() {
+  try {
+    const blob = pendingCharacterBlob || (await loadCharacterFile());
+    updateCustomCharacterThumb(blob);
+  } catch {
+    updateCustomCharacterThumb(null);
+  }
 }
 
 function replaceCanvases() {
@@ -1023,6 +1146,7 @@ function applyConfigToGame(cfg) {
   const laneOrDiffChanged = laneCountChanged ||
     cfg.difficulty !== config.difficulty;
   const dprChanged = Number(cfg.maxPixelRatio) !== Number(config.maxPixelRatio);
+  const characterChanged = (cfg.characterId ?? 1) !== (config.characterId ?? 1);
 
   config = cfg;
   // maxPixelRatio 変更時は実効 dpr を更新（構造変更時は後続の buildGame / resize で反映）
@@ -1103,6 +1227,9 @@ function applyConfigToGame(cfg) {
   // まもなく結果画面に遷移するため、ここで譜面を再構築して lastResult を
   // ゼロリセットすると、フェード完了時の showResult() が直前までのスコアを
   // 消してしまう（設定変更は次回プレイから反映されれば十分）。
+  if (characterChanged && worker && !laneOrDiffChanged && !dprChanged) {
+    void pushCharacterToWorker(config.characterId);
+  }
   renderKeyHints();
 }
 
@@ -1907,6 +2034,13 @@ function readSettingsUI() {
     perspectiveEnabled:
       document.getElementById("perspectiveEnabled")?.checked ?? true,
     noteType: document.getElementById("noteType")?.value || "animal",
+    characterId: (() => {
+      const raw = document.querySelector('input[name="characterId"]:checked')
+        ?.value;
+      if (raw === "custom") return "custom";
+      const n = Math.round(Number(raw));
+      return Number.isFinite(n) ? Math.min(10, Math.max(1, n)) : 1;
+    })(),
     laneOpacity: parseFloat(
       document.getElementById("laneOpacity")?.value ?? "0.35",
     ),
@@ -2006,6 +2140,14 @@ function openSettings() {
       DEFAULT_CONFIG.laneColors[l % DEFAULT_CONFIG.laneColors.length];
   }
 
+  {
+    const cid = config.characterId ?? 1;
+    document.querySelectorAll('input[name="characterId"]').forEach((el) => {
+      el.checked = String(el.value) === String(cid);
+    });
+    void refreshCustomCharacterThumbFromStore();
+  }
+
   // 値の代入で input/change が飛ぶ環境向けに、UI 反映後にもう一度クリアする
   settingsDirty = false;
   showScreen("settings");
@@ -2023,6 +2165,11 @@ function applySettings() {
   applyConfigToGame(readSettingsUI());
   // 背景はプレビューのみ即時反映しているため、ここで初めて永続化する
   commitPendingBackground();
+  if (config.characterId === "custom" && pendingCharacterBlob) {
+    saveCharacterFile(pendingCharacterBlob).catch((err) =>
+      console.warn("saveCharacterFile:", err)
+    );
+  }
   saveConfig(config);
   configSnapshot = null; // 適用済みなので hide.bs.modal 側の巻き戻しを無効化
   settingsDirty = false;
@@ -2054,6 +2201,31 @@ settingsPanelEl.addEventListener("change", onSettingsInput);
 
 document.getElementById("accentColor")?.addEventListener("input", (e) => {
   e.target.dataset.touched = "1";
+});
+
+document.getElementById("characterFile")?.addEventListener(
+  "change",
+  (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    pendingCharacterBlob = file;
+    updateCustomCharacterThumb(file);
+    const radio = document.getElementById("charCustom");
+    if (radio) radio.checked = true;
+    const next = { ...readSettingsUI(), characterId: "custom" };
+    settingsDirty = true;
+    applyConfigToGame(next);
+    void pushCharacterToWorker("custom");
+  },
+);
+
+document.querySelectorAll('input[name="characterId"]').forEach((el) => {
+  el.addEventListener("change", () => {
+    if (!el.checked) return;
+    settingsDirty = true;
+    applyConfigToGame(readSettingsUI());
+    void pushCharacterToWorker(el.value === "custom" ? "custom" : el.value);
+  });
 });
 
 document.getElementById("btnResetAccentColor")?.addEventListener(

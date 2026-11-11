@@ -432,6 +432,32 @@
 
       audio#player { width: 100%; height: 36px; }
       #analyzingProgressWrap { width: 240px; }
+
+      /* Character picker previews */
+      #characterPicker .char-pick {
+        width: 80px;
+        height: 80px;
+        padding: 6px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #characterPicker .char-thumb {
+        max-width: 68px;
+        max-height: 68px;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        image-rendering: auto;
+      }
+      #characterPicker .char-fallback {
+        font-weight: 600;
+        font-size: 0.95rem;
+      }
+      #characterPicker .btn-check:checked + .char-pick {
+        border-color: var(--bs-primary);
+        box-shadow: 0 0 0 0.15rem rgba(13, 110, 253, 0.35);
+      }
     </style>
 
     <!-- Styles dedicated to the top-screen “falling notes” effect.
@@ -994,6 +1020,37 @@
                   </select>
                   <div class="small text-muted mt-1">
                     Long notes are filled with the same emoji (not split).
+                  </div>
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label">Character</label>
+                  <input type="file" class="form-control form-control-sm mb-2" id="characterFile" accept="image/*">
+                  <div class="d-flex flex-wrap gap-2" id="characterPicker">
+                    <input type="radio" class="btn-check" name="characterId" id="char1" value="1" checked>
+                    <label class="btn btn-outline-secondary btn-sm char-pick" for="char1"><img src="/zip-zap-notes/characters/1.webp" alt="1" class="char-thumb img-fluid" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'char-fallback',textContent:'1'}))"></label>
+                    <input type="radio" class="btn-check" name="characterId" id="char2" value="2">
+                    <label class="btn btn-outline-secondary btn-sm char-pick" for="char2"><img src="/zip-zap-notes/characters/2.webp" alt="2" class="char-thumb img-fluid" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'char-fallback',textContent:'2'}))"></label>
+                    <input type="radio" class="btn-check" name="characterId" id="char3" value="3">
+                    <label class="btn btn-outline-secondary btn-sm char-pick" for="char3"><img src="/zip-zap-notes/characters/3.webp" alt="3" class="char-thumb img-fluid" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'char-fallback',textContent:'3'}))"></label>
+                    <input type="radio" class="btn-check" name="characterId" id="char4" value="4">
+                    <label class="btn btn-outline-secondary btn-sm char-pick" for="char4"><img src="/zip-zap-notes/characters/4.webp" alt="4" class="char-thumb img-fluid" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'char-fallback',textContent:'4'}))"></label>
+                    <input type="radio" class="btn-check" name="characterId" id="char5" value="5">
+                    <label class="btn btn-outline-secondary btn-sm char-pick" for="char5"><img src="/zip-zap-notes/characters/5.webp" alt="5" class="char-thumb img-fluid" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'char-fallback',textContent:'5'}))"></label>
+                    <input type="radio" class="btn-check" name="characterId" id="char6" value="6">
+                    <label class="btn btn-outline-secondary btn-sm char-pick" for="char6"><img src="/zip-zap-notes/characters/6.webp" alt="6" class="char-thumb img-fluid" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'char-fallback',textContent:'6'}))"></label>
+                    <input type="radio" class="btn-check" name="characterId" id="char7" value="7">
+                    <label class="btn btn-outline-secondary btn-sm char-pick" for="char7"><img src="/zip-zap-notes/characters/7.webp" alt="7" class="char-thumb img-fluid" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'char-fallback',textContent:'7'}))"></label>
+                    <input type="radio" class="btn-check" name="characterId" id="char8" value="8">
+                    <label class="btn btn-outline-secondary btn-sm char-pick" for="char8"><img src="/zip-zap-notes/characters/8.webp" alt="8" class="char-thumb img-fluid" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'char-fallback',textContent:'8'}))"></label>
+                    <input type="radio" class="btn-check" name="characterId" id="char9" value="9">
+                    <label class="btn btn-outline-secondary btn-sm char-pick" for="char9"><img src="/zip-zap-notes/characters/9.webp" alt="9" class="char-thumb img-fluid" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'char-fallback',textContent:'9'}))"></label>
+                    <input type="radio" class="btn-check" name="characterId" id="char10" value="10">
+                    <label class="btn btn-outline-secondary btn-sm char-pick" for="char10"><img src="/zip-zap-notes/characters/10.webp" alt="10" class="char-thumb img-fluid" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'char-fallback',textContent:'10'}))"></label>
+                    <span id="charCustomWrap" class="d-none">
+                      <input type="radio" class="btn-check" name="characterId" id="charCustom" value="custom">
+                      <label class="btn btn-outline-secondary btn-sm char-pick" for="charCustom"><img id="charCustomThumb" alt="custom" class="char-thumb img-fluid" hidden></label>
+                    </span>
                   </div>
                 </div>
 

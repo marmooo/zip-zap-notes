@@ -1424,6 +1424,8 @@ export class RhythmGame {
   #activeNotes = []; // 判定ラインを通過中のノート
   #playerLane = 0;
   #playerVisX = 0; // 表示用のなめらかなレーン位置（レーン単位・小数）
+  #playerSprite = null; // ImageBitmap | null（キャラ画像。無ければ丸）
+  #playerFacing = 1; // 1=右向き, -1=左向き
   #judgmentFx = [];
   #particles = [];
   #score = 0;
@@ -1599,6 +1601,7 @@ export class RhythmGame {
     if (this.#gameOver) return;
     const next = this.#playerLane + (dir < 0 ? -1 : 1);
     if (next < 0 || next >= this.#opts.laneCount) return;
+    this.#playerFacing = dir < 0 ? -1 : 1;
     this.#playerLane = next;
     this.#uiDirty = true;
   }
@@ -1611,7 +1614,14 @@ export class RhythmGame {
       Math.min(this.#opts.laneCount - 1, Math.round(lane)),
     );
     if (target === this.#playerLane) return;
+    this.#playerFacing = target > this.#playerLane ? 1 : -1;
     this.#playerLane = target;
+    this.#uiDirty = true;
+  }
+
+  /** @param {ImageBitmap|null} bitmap */
+  setCharacterSprite(bitmap) {
+    this.#playerSprite = bitmap || null;
     this.#uiDirty = true;
   }
 
@@ -2614,30 +2624,44 @@ export class RhythmGame {
     const xr = this.#perspX(vis + 1, laneW, W, hitY, btnBot, p);
     const cx = (xl + xr) / 2;
     const cy = hitY;
-    const r = Math.min(20 * d, (xr - xl) * 0.3);
-    // 被弾中は白→赤に点滅
     const hurt = this.#hitFlash > 0;
+    const r = Math.min(22 * d, (xr - xl) * 0.32);
+
     ctx.save();
     ctx.shadowColor = hurt ? DANGER_COLOR : color;
-    ctx.shadowBlur = (o.glow ? 24 : 12) * d;
-    ctx.fillStyle = hurt ? DANGER_COLOR : "#ffffff";
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - r);
-    ctx.lineTo(cx + r, cy);
-    ctx.lineTo(cx, cy + r * 0.6);
-    ctx.lineTo(cx - r, cy);
-    ctx.closePath();
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = color;
-    const sr = r * 0.55;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - sr);
-    ctx.lineTo(cx + sr, cy);
-    ctx.lineTo(cx, cy + sr * 0.6);
-    ctx.lineTo(cx - sr, cy);
-    ctx.closePath();
-    ctx.fill();
+    ctx.shadowBlur = (o.glow ? 26 : 14) * d;
+
+    const sprite = this.#playerSprite;
+    if (sprite) {
+      // キャラ画像：レーン幅いっぱい（左右移動で向きを反転）
+      const laneWidth = Math.max(8 * d, xr - xl);
+      const size = laneWidth;
+      ctx.translate(cx, cy);
+      ctx.scale(this.#playerFacing, 1);
+      if (hurt) {
+        ctx.globalAlpha = 0.85;
+        ctx.shadowColor = DANGER_COLOR;
+      }
+      ctx.drawImage(sprite, -size / 2, -size / 2, size, size);
+    } else {
+      // フォールバック：丸（pick-pack-notes と同じ）
+      ctx.fillStyle = hurt ? DANGER_COLOR : "#ffffff";
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.65, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.28, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     ctx.restore();
   }
 

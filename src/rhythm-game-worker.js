@@ -117,6 +117,11 @@ self.onmessage = (e) => {
       break;
     }
 
+    case "setCharacter": {
+      if (game) game.setCharacterSprite(msg.bitmap ?? null);
+      break;
+    }
+
     case "updateOptions": {
       if (game) game.updateOptions(msg.patch);
       break;
