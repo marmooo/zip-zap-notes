@@ -117,7 +117,7 @@ const DEFAULT_CONFIG = {
   // Midy の sample キャッシュ粒度。none → ads → adsr → note → segment → chunk。
   // 高いほど複雑な MIDI で効率が良いが、iOS の OfflineAudioContext 不具合で落ちやすくなる。
   cacheMode: isIOS ? "none" : "chunk",
-  noteType: "animal", // "tile" | "food" | "animal" | "object"
+  noteType: "tile", // "tile" | "food" | "animal" | "object"（デフォルトは負荷の低いタイル）
   characterId: 1, // 1〜10 = characters/N.webp / "custom" = ユーザー画像
 };
 
@@ -151,7 +151,7 @@ function loadConfig() {
       loaded.noteType = loaded.emojiMode ? "food" : "tile";
     }
     if (!["tile", "food", "animal", "object"].includes(loaded.noteType)) {
-      loaded.noteType = "animal";
+      loaded.noteType = "tile";
     }
     delete loaded.emojiMode;
     return loaded;
@@ -504,8 +504,8 @@ function buildWorkerOptions() {
     initialHp: currentHp,
     // canvas 座標系（dpr込み）での navbar 回避量。HUD 描画開始 y に加算する。
     topInset: computeTopInset(),
-    noteType: config.noteType ?? "animal",
-    emojis: getEmojisForType(config.noteType ?? "animal"),
+    noteType: config.noteType ?? "tile",
+    emojis: getEmojisForType(config.noteType ?? "tile"),
   };
 }
 
@@ -1149,6 +1149,7 @@ function applyConfigToGame(cfg) {
   const characterChanged = (cfg.characterId ?? 1) !== (config.characterId ?? 1);
 
   config = cfg;
+  if (laneOrDiffChanged) updateDocumentTitle();
   // maxPixelRatio 変更時は実効 dpr を更新（構造変更時は後続の buildGame / resize で反映）
   if (dprChanged) dpr = computeDpr();
   // MIDI サンプルキャッシュ粒度（再生中でも次回ボイス生成から効く）
@@ -1192,8 +1193,8 @@ function applyConfigToGame(cfg) {
           laneOpacity: config.laneOpacity ?? 0.35,
           scrollSpeed: config.scrollSpeed,
           perspective: (config.perspectiveEnabled ?? true) ? PERSPECTIVE : 0,
-          noteType: config.noteType ?? "animal",
-          emojis: getEmojisForType(config.noteType ?? "animal"),
+          noteType: config.noteType ?? "tile",
+          emojis: getEmojisForType(config.noteType ?? "tile"),
         },
       });
     }
@@ -1216,8 +1217,8 @@ function applyConfigToGame(cfg) {
           laneOpacity: config.laneOpacity ?? 0.35,
           scrollSpeed: config.scrollSpeed,
           perspective: (config.perspectiveEnabled ?? true) ? PERSPECTIVE : 0,
-          noteType: config.noteType ?? "animal",
-          emojis: getEmojisForType(config.noteType ?? "animal"),
+          noteType: config.noteType ?? "tile",
+          emojis: getEmojisForType(config.noteType ?? "tile"),
         },
       });
     }
@@ -1900,12 +1901,42 @@ document.getElementById("btnSaveScore")?.addEventListener("click", () => {
   canvas?.toBlob((blob) => blob && downloadScoreCard(blob), "image/png");
 });
 
+function formatTrackShareLabel(maxChars = 48) {
+  const meta = currentTrackMeta;
+  if (!meta) return "";
+  const title = (meta.title || "").trim();
+  const site = (meta.siteName || "").trim();
+  if (!title && !site) return "";
+  let t = title;
+  if (t.length > maxChars) t = t.slice(0, maxChars - 1) + "…";
+  if (t && site) return `${t} · ${site}`;
+  return t || site;
+}
+
+/** タブタイトル: アプリ名固定 + 曲情報 + 難易度（pick-pack と同じ方針） */
+function updateDocumentTitle() {
+  const meta = currentTrackMeta;
+  const title = (meta?.title || "").trim();
+  const site = (meta?.siteName || "").trim();
+  const diff = config.difficulty || "NORMAL";
+  const parts = [];
+  if (title) parts.push(title);
+  if (site) parts.push(site);
+  if (parts.length > 0) {
+    document.title = `Zip Zap Notes: ${parts.join(" · ")} · ${diff}`;
+  } else {
+    document.title = "Zip Zap Notes";
+  }
+}
+
 document.getElementById("btnShareScore")?.addEventListener("click", () => {
   const shareUrl = getShareUrl();
   const dead = Boolean(lastResult.dead);
-  const text = dead
-    ? `Zip Zap Notes: ${lastResult.score} points · GAME OVER · ${config.difficulty}`
-    : `Zip Zap Notes: ${lastResult.score} points · CLEAR · ${config.difficulty}`;
+  const status = dead ? "GAME OVER" : "CLEAR";
+  const track = formatTrackShareLabel(48);
+  const text = track
+    ? `Zip Zap Notes: ${lastResult.score} points · ${status} · ${config.difficulty} · ${track}`
+    : `Zip Zap Notes: ${lastResult.score} points · ${status} · ${config.difficulty}`;
   const url = `https://twitter.com/intent/tweet?text=${
     encodeURIComponent(text)
   }&url=${encodeURIComponent(shareUrl)}`;
@@ -2033,7 +2064,7 @@ function readSettingsUI() {
         : config.laneLineColor ?? "",
     perspectiveEnabled:
       document.getElementById("perspectiveEnabled")?.checked ?? true,
-    noteType: document.getElementById("noteType")?.value || "animal",
+    noteType: document.getElementById("noteType")?.value || "tile",
     characterId: (() => {
       const raw = document.querySelector('input[name="characterId"]:checked')
         ?.value;
@@ -2093,7 +2124,7 @@ function openSettings() {
   const persEl = document.getElementById("perspectiveEnabled");
   if (persEl) persEl.checked = config.perspectiveEnabled ?? true;
   const noteTypeEl = document.getElementById("noteType");
-  if (noteTypeEl) noteTypeEl.value = config.noteType ?? "animal";
+  if (noteTypeEl) noteTypeEl.value = config.noteType ?? "tile";
   const joEl = document.getElementById("judgeOffset");
   if (joEl) {
     joEl.value = config.judgeOffset ?? 0;
@@ -3185,6 +3216,7 @@ async function loadMIDIFromQuery() {
 function clearTrackMeta() {
   currentTrackMeta = null;
   updateTrackAttributionUI();
+  updateDocumentTitle();
 }
 
 function setTrackMeta(meta) {
@@ -3199,6 +3231,7 @@ function setTrackMeta(meta) {
     }
     : null;
   updateTrackAttributionUI();
+  updateDocumentTitle();
 }
 
 function updateTrackAttributionUI() {
