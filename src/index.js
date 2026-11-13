@@ -143,7 +143,7 @@ function loadConfig() {
       ...DEFAULT_CONFIG,
       ...JSON.parse(
         localStorage.getItem("ZipZapNotesConfig") ||
-          localStorage.getItem("FlipFlapDodgeConfig") ||
+          localStorage.getItem("ZipZapDodgeConfig") ||
           "{}",
       ),
     };
@@ -2405,7 +2405,7 @@ document.getElementById("btnApplySettings").addEventListener(
 document.getElementById("btnResetAllSettings")?.addEventListener(
   "click",
   async () => {
-    localStorage.removeItem("FlipFlapDodgeConfig");
+    localStorage.removeItem("ZipZapDodgeConfig");
     localStorage.removeItem("darkMode");
     try {
       await new Promise((resolve, reject) => {
@@ -4005,7 +4005,7 @@ function loadBackgroundUrl(url) {
 // URL.createObjectURL() の Blob URL はページを閉じると無効になるため、
 // リロード後も同じ背景を復元できるよう、ファイル本体を IndexedDB に保存しておく。
 // プリセット背景（./data/... のURL）は文字列なので config 経由で localStorage に保存すればよい。
-const BG_DB_NAME = "FlipFlapNotesBackground";
+const BG_DB_NAME = "ZipZapNotesBackground";
 const BG_STORE = "files";
 function openBackgroundDb() {
   return new Promise((resolve, reject) => {
