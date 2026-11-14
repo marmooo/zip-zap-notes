@@ -25,11 +25,11 @@ Settings Screen ![Settings Screen](screenshots/mugen/05.png)
 
 Score Screen ![Score Screen](screenshots/mugen/06.png)
 
-Customization - Background
-![Customization - Background](screenshots/mugen/07.png)
+Customization - Note Type
+![Customization - Note Type](screenshots/mugen/07.png)
 
-Customization - Notes/Lanes
-![Customization - Notes/Lanes](screenshots/mugen/08.png)
+Customization - Character
+![Customization - Character](screenshots/mugen/08.png)
 
 Customization - SoundFont ![Customization - Keys](screenshots/mugen/09.png)
 
