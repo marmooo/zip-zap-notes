@@ -1466,6 +1466,7 @@ function drawScoreCard(grade, dodgeRate, dead) {
   };
   const accent = dead ? palette.hit : (gradeColors[grade] || palette.dodge);
 
+  // Background + soft accent glow (circular judgment signature on the right).
   const bg = ctx.createLinearGradient(0, 0, w, h);
   bg.addColorStop(0, "#10151b");
   bg.addColorStop(0.58, "#151d22");
@@ -1478,6 +1479,7 @@ function drawScoreCard(grade, dodgeRate, dead) {
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, w, h);
 
+  // Product wordmark: Zip (neutral) Zap (accent) Notes.
   ctx.fillStyle = accent;
   ctx.beginPath();
   ctx.arc(66, 70, 10, 0, Math.PI * 2);
@@ -1502,6 +1504,7 @@ function drawScoreCard(grade, dodgeRate, dead) {
     141,
   );
 
+  // Left column
   const history = playHistory.slice(-160);
   ctx.font = "700 22px system-ui, sans-serif";
   ctx.fillStyle = palette.mute;
@@ -1961,7 +1964,7 @@ function formatTrackShareLabel(maxChars = 48) {
   return t || site;
 }
 
-/** タブタイトル: アプリ名固定 + 曲情報 + 難易度（pick-pack と同じ方針） */
+/** タブタイトル: アプリ名固定 + 曲情報 + 難易度 */
 function updateDocumentTitle() {
   const meta = currentTrackMeta;
   const title = (meta?.title || "").trim();
@@ -3251,7 +3254,10 @@ function trackMetaFromLibraryRow(row) {
   const collectionId = String(row.file || "").split("/")[0] || "";
   const col = collectionId ? midiLibrary.collections.get(collectionId) : null;
   const web = row.web || col?.web || "";
-  const siteName = row.collection || col?.name || collectionId || "";
+  // Prefer collections.json `name` (display name) over row.collection / id.
+  // Share-link loads may have no row.collection and an empty collections Map;
+  // callers that need the proper name should ensure collections are available.
+  const siteName = col?.name || row.collection || collectionId || "";
   const license = row.license || col?.license || "";
   const title = row.title || "";
   const composer = row.composer || col?.composer || "";
@@ -3290,7 +3296,19 @@ async function loadMIDIFromQuery() {
       throw new Error(`MIDI not found: ${collectionId}#${index}`);
     }
 
-    const col = midiLibrary.collections?.get(collectionId);
+    // Share links intentionally skip full playlist load, but we still need
+    // collections.json so the score card / attribution can show the display
+    // name (e.g. "般若's MIDIの里") instead of the URL id ("般若sMIDIの里").
+    if (!midiLibrary.collections.has(collectionId)) {
+      try {
+        const cols = await (await fetch(`${dbBase}/collections.json`)).json();
+        for (const c of cols) midiLibrary.collections.set(c.id, c);
+      } catch (err) {
+        console.warn("Failed to load collections for share link meta:", err);
+      }
+    }
+
+    const col = midiLibrary.collections.get(collectionId);
     if (col) {
       if (!row.collection) row.collection = col.name;
       if (!row.composer && col.composer) row.composer = col.composer;
